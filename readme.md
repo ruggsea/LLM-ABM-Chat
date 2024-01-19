@@ -7,7 +7,7 @@ This repository implements LLM (Language Learning Model) agents and chat objects
 To use this library, you need to have the following prerequisites installed:
 
 - Python 3.x
-- [Ooogabooga](http://example.com) with any instruct model loaded (or any OpenAI-like API) set up at `http://127.0.0.1:1200`
+- [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) with any instruct model loaded (or any OpenAI-like API) set up at `http://127.0.0.1:1200`
 
 Once you have the prerequisites set up, you can install the library by following these steps:
 
