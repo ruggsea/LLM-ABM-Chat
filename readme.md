@@ -43,7 +43,7 @@ The library currently supports two types of agents:
 
 
 ## Planned features
-~~- memory system for agents~~ 
+- ~~memory system for agents~~ 
 - dynamic summarization of the chat to fit model context length
 - better logging
 - better selection of the next agent to speak
