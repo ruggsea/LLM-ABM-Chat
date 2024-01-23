@@ -35,8 +35,15 @@ chat_test.run_chat()
 ```
 The chat will run and print the messages to the console. 
 
+## Types of agents
+
+The library currently supports two types of agents:
+- `Agent` - a simple agent that can be used to test the chat functionality
+- `MemoryAgent` - an agent that generates observations and stores them in a memory. Observations relevant to the last message in the chat are then used to generate responses.
+
+
 ## Planned features
-- memory system for agents
+~~- memory system for agents~~ 
 - dynamic summarization of the chat to fit model context length
 - better logging
 - better selection of the next agent to speak

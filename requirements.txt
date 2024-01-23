@@ -1,0 +1,1 @@
+txtai @ git+https://github.com/neuml/txtai@ea64551f34ed87b59e0d5497f10ff059837aef86
