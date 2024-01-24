@@ -8,6 +8,7 @@ To use this library, you need to have the following prerequisites installed:
 
 - Python 3.x
 - [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) with any instruct model loaded (or any OpenAI-like API) set up at `http://127.0.0.1:1200`
+- in alternative, a gpt-3.5 model is provided as `ChatgptLLM` in `llm_engines.py`. It will try to load a OPENAI_API_KEY from a .env file in the root directory of the project. 
 
 Once you have the prerequisites set up, you can install the library by following these steps:
 
