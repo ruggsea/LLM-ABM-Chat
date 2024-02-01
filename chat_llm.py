@@ -26,17 +26,10 @@ class Agent:
             self.prompt = f"""
             You are a person called {self.name}. You are texting with some friends in a telegram group. 
             You have interests in {interests_str}. You usually show the following attitude: {behavior_str}. 
-            Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible.
-            Provide your answer as you would text it.
-            """
-            
-            self.personal_prompt = f"""
-            You are a person called {self.name}. You are texting with some friends in a telegram group. 
-            You have interests in {interests_str}. You usually show the following behavior: {behavior_str}. 
             """
         else:
             self.prompt = prompt
-            self.personal_prompt = prompt
+            
         
         self.llm = llm
         self.llm.set_system_prompt(self.prompt)
@@ -76,24 +69,33 @@ class Agent:
         """
         formatted_last_messages_str = []
         last_messages = last_messages[-5:] # Only consider the last 5 messages  
-        for agent, message in last_messages:
-            formatted_last_messages_str.append(f"{agent}: {message}")
+        for message_n, agent, message in last_messages:
+            formatted_last_messages_str.append(f"{message_n}. {agent}: {message}")
         formatted_last_messages_str = "\n".join(formatted_last_messages_str)
         
         seek_answer_prompt = f"""
-        The last messages were:
+        Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging.
+        Provide your answer as you would text it. Avoid greeting people and saying hi if you have already greeted them before.
+        The last messages (they are shown in the format "message_number. name: message") were:
         ###
         {formatted_last_messages_str}
         ###
         
-        How do you answer? Your answer:
+        How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+        
+        "Hey, everything is fine. I am just chilling. ##"
+        "I am doing great. ##"
+        "I like that one ##"
+        "message ##"
+        
+        Your answer:  
         ###
         {self.name}:"""
         
-        seek_answer_prompt = f"{self.prompt}\n{seek_answer_prompt}"
-        
         if extra_context != "":
-            seek_answer_prompt = f"{extra_context}\n{seek_answer_prompt}"
+            seek_answer_prompt = f"{self.prompt}{extra_context}\n{seek_answer_prompt}"
+        else:
+            seek_answer_prompt = f"{self.prompt}\n{seek_answer_prompt}"
         
         agent_answer = ""
         
@@ -158,7 +160,7 @@ class ChatThread:
         
         random_agent = self.pick_random_agent()
         random_conversation_starter = random.choice(self.conversation_starters)
-        start_message = (random_agent.get_name(), random_conversation_starter)
+        start_message = (1,random_agent.get_name(), random_conversation_starter)
         self.chat_history.append(start_message)
         return start_message
     
@@ -181,9 +183,25 @@ class ChatThread:
         extra_context = f"""
         {self.chat_goal}. In this chat, there's you, {agent.get_name()}, and {other_agents_str}.
         """
+        # check if the answer fits the validation criteria
         
-        agent_answer = agent.get_answer(last_messages)
-        self.chat_history.append((agent.get_name(), agent_answer))
+        validation_ending="##"
+        agent_answer = ""
+        while not agent_answer.endswith(validation_ending):
+            agent_answer = agent.get_answer(last_messages)
+             # trim the answer to remove everything after the validation ending
+            agent_answer = agent_answer[:agent_answer.find(validation_ending)]
+
+            if agent_answer=="":
+                print(f"Invalid answer. Retrying...")
+                continue
+            else:
+                # add the validation ending
+                agent_answer = agent_answer + validation_ending
+            
+        # remove the validation ending
+        agent_answer = agent_answer[:agent_answer.find(validation_ending)]
+        self.chat_history.append((self.turn_count,agent.get_name(), agent_answer))
         return agent_answer
     
     def render_last_message(self):
@@ -191,11 +209,12 @@ class ChatThread:
         Renders the last message in the chat history.
         """
         last_message = self.chat_history[-1]
-        agent, message = last_message[0], last_message[1]
+        n_message, agent, message =  last_message[0], last_message[1], last_message[2]
         
         msg_string = f"\033[91m{agent}\033[0m: {message}"
         wrapped_message = textwrap.fill(msg_string, width=80, subsequent_indent=' ' * 4)
         print(wrapped_message)
+        
         
     def run_chat(self, max_turns=50):
         """
@@ -211,15 +230,18 @@ class ChatThread:
         self.render_last_message()
         max_turns = max_turns + len(self.chat_history)
 
-        starting_agent = self.chat_history[-1][0]
+        starting_agent_name = self.chat_history[0][1]
+        starting_agent = [agent for agent in self.agent_list if agent.get_name() == starting_agent_name][0]
         prev_agent = starting_agent
         
         global turn_count
-        turn_count = len(self.chat_history)
+        self.turn_count = len(self.chat_history)
         
-        while turn_count <= max_turns:
+        
+        
+        while self.turn_count <= max_turns:
             for agent in self.agent_list:
-                agent.run_routines(turn_count, self.chat_history)
+                agent.run_routines(self.turn_count, self.chat_history)
             
             if self.sel_method == "random":
                 random_agent = self.pick_random_agent()
@@ -227,11 +249,12 @@ class ChatThread:
                     random_agent = self.pick_random_agent()
 
             last_messages = self.chat_history
-
+            # update turn count and get answer for the turn
+            self.turn_count += 1
             self.get_chat_answer(last_messages, random_agent)
             self.render_last_message()
             prev_agent = random_agent
-            turn_count += 1
+            
             
         return self.chat_history
     
@@ -266,25 +289,42 @@ class MemoryAgent(Agent):
         formatted_last_messages_str = []
         print(f"Processing observations for {self.name}...")
 
-        for agent, message in last_messages[-self.n_last_messages:]:
-            formatted_last_messages_str.append(f"{agent}: {message}")
+        for message_n, agent, message in last_messages[-self.n_last_messages:]:
+            formatted_last_messages_str.append(f"{message_n}. {agent}: {message}")
         formatted_last_messages_str = "\n".join(formatted_last_messages_str)
-        observation_prompt = """
+        observation_prompt = f"""
         Your goal is to remember what happened in the last messages by saving memorable observations in your memory.
-        Give me 5 personal observations in third person about the other agents from the last messages, divided by a new line.
-        Those are the last messages in the chat:
+        Those are the last messages in the chat (they are shown in the format "message_number. name: message"):
         ###
         {formatted_last_messages_str}
         ###
+        Summarize the last messages in the chat in 5 observations, divided by a new line. The observations should be short and casual., useful for remembering what happened in the chat and should strictly be a truthful accounts of what is talked about in the chat.
+        Use this format for your observations:
+        
+        1. Observation 1 \n
+        2. Observation 2 \n
+        3. Observation 3 \n
+        etc.
+           
         """
 
+        observation_prompt_final = f"""
+        {self.prompt}\n
+        {observation_prompt}
+        """
+        
+        
         observations_list = []
+        # log the prompt for debugging
+        self.log(observation_prompt_final)
         while len(observations_list) < 5:
             try:
-                observations = self.llm.generate_response(observation_prompt)
+                observations = self.llm.generate_response(observation_prompt_final)
                 observations_list = observations.split("\n")
             except Exception as e:
                 print(f"Observations could not be generated: {e}. Retrying...")
+            if len(observations_list) < 5:
+                print("Not enough observations generated. Retrying...")
 
         return observations_list
     
@@ -310,38 +350,92 @@ class MemoryAgent(Agent):
         """
         formatted_last_messages_str = []
         
-        for agent, message in last_messages[-5:]:
-            formatted_last_messages_str.append(f"{agent}: {message}")
+        for message_n, agent, message in last_messages[-5:]:
+            formatted_last_messages_str.append(f"{message_n}. {agent}: {message}")
         formatted_last_messages_str = "\n".join(formatted_last_messages_str)
         
         seek_answer_prompt = f"""
-        The last messages in the chat were: 
+        Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging.
+        Provide your answer as you would text it. Avoid greeting people and saying hi if you have already greeted them before.
+        The last messages in the chat were (they are shown in the format "message_number. name: message"): 
         ###
         {formatted_last_messages_str}
         ###
-        How do you answer? Your answer:
+        How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+        
+        "Hey, everything is fine. I am just chilling. ##"
+        "I am doing great. ##"
+        "I like that one ##"
+        "message ##"
+        
+        Your answer:          
         ###
         {self.name}:
         """
         
         if self.memory.isdense():   
             last_message = last_messages[-1]
-            memories = self.memory.search(last_message[1], limit=5)
+            memories = self.memory.search(last_message[-1], limit=5)
             context = "\n".join(x["text"] for x in memories)
-            seek_answer_prompt_with_context = f"""
-            {self.prompt}\n
-            In addition, you remember the following memories relevant to chat right now:
-            {context}\n 
-            {seek_answer_prompt}
-            """
+            if extra_context != "":
+                seek_answer_prompt_with_context = f"""
+                {self.prompt}\n
+                {extra_context}\n
+                Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging.
+                Provide your answer as you would text it. Avoid greeting people and saying hi if you have already greeted them before.
+                The last messages in the chat were (they are shown in the format "message_number. name: message"): 
+                ###
+                {formatted_last_messages_str}
+                ###
+                How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+                
+                "Hey, everything is fine. I am just chilling. ##"
+                "I am doing great. ##"
+                "I like that one ##"
+                "message ##"
+                
+                In addition, you remember the following memories relevant to chat right now:
+                {context}\n
+                
+                Your answer:          
+                ###
+                {self.name}:
+                """
+            else:
+                seek_answer_prompt_with_context = f"""
+                {self.prompt}\n
+                Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging.
+                Provide your answer as you would text it. Avoid greeting people and saying hi if you have already greeted them before.
+                The last messages in the chat were (they are shown in the format "message_number. name: message"): 
+                ###
+                {formatted_last_messages_str}
+                ###
+                How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+                
+                "Hey, everything is fine. I am just chilling. ##"
+                "I am doing great. ##"
+                "I like that one ##"
+                "message ##"
+                                
+                In addition, you remember the following memories relevant to chat right now:
+                {context}\n
+                
+                Your answer:          
+                ###
+                {self.name}:
+                """
         else:
-            seek_answer_prompt_with_context = f"""
-            {self.prompt}\n
-            {seek_answer_prompt}            
-            """
-        
-        if extra_context != "":
-            seek_answer_prompt = f"{extra_context}\n{seek_answer_prompt_with_context}"
+            if extra_context != "":
+                seek_answer_prompt_with_context = f"""
+                {self.prompt}\n
+                {extra_context}\n
+                {seek_answer_prompt}
+                """
+            else:
+                seek_answer_prompt_with_context = f"""
+                {self.prompt}\n
+                {seek_answer_prompt}            
+                """
         
         agent_answer = ""
         
@@ -370,3 +464,87 @@ class MemoryAgent(Agent):
             pass
     
     
+
+
+class ReflectingAgent(MemoryAgent):
+    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_last_messages=10, n_last_messages_reflection=20):
+        """
+        Initializes a ReflectingAgent object, an agent that creates reflections from memories every n_last_messages_reflection turns.
+        
+        Args:
+        name (str): The name of the agent.
+        llm (LLMApi): The language model API engine to use.
+        prompt (str, optional): The initial prompt for the agent. If left empty, a modular prompt is generated using the interests and behavior arguments. Defaults to an empty string.
+        interests (list, optional): The interests of the agent. Defaults to an empty list.
+        behavior (list, optional): The behavior of the agent. Defaults to an empty list.
+        n_last_messages (int, optional): The number of messages that gets considered when generating memories. Defaults to 10.
+        n_last_messages_reflection (int, optional): The number of messages that gets considered when generating reflections. Defaults to 20.    
+        
+        
+        """
+        super().__init__(name, llm, prompt, interests, behavior, n_last_messages)
+        self.n_last_messages_reflection = n_last_messages_reflection
+        
+    def get_reflections(self, n_memories):
+        """
+        Gets reflections from the last memories.
+        
+        Args:
+        n_memories (int): The number of memories to use for reflections.
+        
+        """
+        
+        memories_obj=self.memory.search("SELECT id, text, entry FROM txtai ORDER BY entry DESC", limit=n_memories)
+        
+        formatted_memories = "\n".join(x["text"] for x in memories_obj)
+        
+        reflection_prompt = f"""
+        You are trying to reflect on your memories, creating new short memories that build on the old ones.
+        You are reflecting on the last {n_memories} memories in your memory. Those are the memories:
+        ###
+        {formatted_memories}
+        ###
+        Give me 5 reflections on those memories, divided by a new line.
+        """
+        
+        reflection_prompt_final = f"""
+        {self.prompt}\n
+        {reflection_prompt}
+        """
+        
+        reflections_list = []
+        # log the prompt for debugging
+        self.log(reflection_prompt_final)
+        
+        while len(reflections_list) < 5:
+            try:
+                reflections = self.llm.generate_response(reflection_prompt_final)
+                reflections_list = reflections.split("\n")
+            except Exception as e:
+                print(f"Reflections could not be generated: {e}. Retrying...")
+            if len(reflections_list) < 5:
+                print("Not enough reflections generated. Retrying...")
+        
+        # save reflections in memory
+        self.memory.upsert(reflections_list)
+        
+        return reflections_list
+    
+    def run_routines(self, turn_count, chat_history):
+        """
+        Runs routines for the agent. It will be called by the ChatThread object at the end of every turn.
+
+        Args:
+            turn_count (int): The current turn count.
+            chat_history (list): The chat history.
+        """
+        if turn_count % self.n_last_messages == 0:
+            print(f"Time to generate memories for {self.name}!")
+            self.save_observations(self.get_observations(chat_history))
+        if turn_count % self.n_last_messages_reflection == 0:
+            print(f"Time to generate reflections for {self.name}!")
+            self.get_reflections(self.n_last_messages)
+        else:
+            pass
+            
+        

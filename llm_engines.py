@@ -90,7 +90,7 @@ class LLMApi(LLM):
         # query api for response
         data = {
         "mode": "instruct",
-        "messages": self.history
+        "messages": self.history,
         }
         response = requests.post(url, headers=headers, json=data, verify=False, )
         
@@ -133,6 +133,4 @@ class ChatgptLLM(LLM):
             self.history = self.history[:1]
         else:
             self.history = []
-        return assistant_message
-    
-    
+        return assistant_message       
