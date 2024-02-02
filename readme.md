@@ -34,7 +34,10 @@ After the chat thread is created, you can start the chat by calling the `run_cha
 ```python
 chat_test.run_chat()
 ```
-The chat will run and print the messages to the console. 
+The chat will run and print the messages to the console. At the end of the chat, the chat will be saved to a file in the `chat_logs` directory.
+
+By default, the chat will run until the user stops it. You can also specify a maximum number of messages by passing the `max_messages` parameter to the `run_chat` method.
+Furthermore, evaluation of the chat will be run by default, and the results will be saved to a file in the `chat_logs` directory. You can disable this by setting the `n_eval` parameter to -1.
 
 ## Types of agents
 
