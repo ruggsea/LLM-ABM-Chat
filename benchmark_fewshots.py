@@ -25,13 +25,19 @@ for n in n_examples:
     mary = mary_partial(n_examples=n)
     # run 10 chat per configuration
     for i in range(10):
-        chat = ChatThread(agent_list=[john,mary], neutral_llm=LLMApi())
+        chat = ChatThread(agent_list=[john,mary], neutral_llm=LLMApi(), n_eval=25)
         chat.run_chat(max_turns=75)
         
         try:
             # find latest chat in the chat_logs folder
-            latest_chat= max([f for f in os.listdir("chat_logs") if f.startswith("chat")], key=os.path.getctime)
-            print(f"Chat {i} with {n} examples saved as ")
+            chat_logs = os.listdir("chat_logs")
+            # add folder to the path
+            chat_logs = [os.path.join("chat_logs",chat) for chat in chat_logs]
+            chat_logs.sort(key=os.path.getmtime, reverse=True)
+            latest_chat = chat_logs[0]
+            
+            print(f"Chat {i} with {n} examples completed. Chat log saved at {latest_chat}")
+            
         except:
             continue
 

@@ -1,25 +1,26 @@
 
 from llm_engines import LLMApi
-import random, textwrap, logging, requests, json, os, time
+import random, textwrap, logging, requests, json, os, time, re
 from txtai import Embeddings
+
 
 
 logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
 
 
 
-
 basic_answer_generation_prompt = """Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. 
 Provide your answer as you would text it. Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting.Avoid greeting people and saying hi if you have already greeted them before. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
 
-history_str=""
+
+react_basic_answer_generation_prompt = """Come up with a message to send to the group by first generating an observation and a thought. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. 
+Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting.Avoid greeting people and saying hi if you have already greeted them before
+Keep your message answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
 
 
 
 
-
-
-eval_prompt=f"""
+eval_prompt="""
 You are a chat evaluator that specializes in evaluating the naturalness of chat conversations with harsh but fair ratings. Y
 You are evaluating a chat. You are evaluating the chat to see if this chat resembles a natural and believable conversation.
 The chat history is:
@@ -35,7 +36,7 @@ Answer:
 
 
 
-eval_prompt=f"""
+eval_prompt="""
 You are a chat evaluator that specializes in evaluating the naturalness and believability of chat conversations with harsh but fair ratings. Your expertise is in assessing conversations using specific criteria to determine how closely they resemble a natural and believable human conversation. For this task, you will focus on the following criteria:
 
 1. Natural Language Understanding (NLU) - Does the chat demonstrate a clear understanding of the nuances of human language, including slang, idioms, and colloquial expressions?
@@ -50,17 +51,17 @@ Please evaluate the following chat history:
 {history_str}
 ####
 
-For each of the criteria above, provide a brief reasoning for your rating on a scale from 1 to 10, where 1 is the worst and 10 is the best. Then, give an overall rating based on your analysis of these criteria. Your response should follow this format:
+For each of the criteria above, provide a brief assessment. Then, give an overall rating based on your analysis of these criteria from 1 to 10, where 1 is the worst and 10 is the. Your response should follow this format:
 
-1. NLU: Reasoning.\nRating.
-2. Contextual Relevance: Reasoning.\nRating.
-3. Emotional Intelligence: Reasoning.\nRating.
-4. Conversational Flow: Reasoning.\nRating.
-5. Adaptability: Reasoning.\nRating.
+1. NLU: Reasoning.
+2. Contextual Relevance: Reasoning. 
+3. Emotional Intelligence: Reasoning 
+4. Conversational Flow: Reasoning.
+5. Adaptability: Reasoning.
 
-Final Evaluation: After considering each criterion, summarize your overall assessment of the chat's naturalness and believability. Provide a final rating from 1 to 10, where 1 is the worst and 10 is the best.
-
-Final Evaluation Reasoning.\nFinal Rating ##
+Final Evaluation Reasoning.
+Final Rating: 
+number/10##
 
 End your answer with ##.
 
@@ -88,10 +89,12 @@ else:
         json.dump(example_messages, f)
 
 
-
+# caching the react examples
+with open("react_examples.json", "r") as f:
+    react_examples = json.load(f)
 
 class Agent:
-    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_examples=3): 
+    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_examples=3, react=True): 
         """
         Initializes an Agent object.
 
@@ -101,6 +104,9 @@ class Agent:
             prompt (str, optional): The initial prompt for the agent. If left empty, a modular prompt is generated using the interests and behavior arguments. Defaults to an empty string.
             interests (list, optional): The interests of the agent. Defaults to an empty list.
             behavior (list, optional): The behavior of the agent. Defaults to an empty list.
+            n_examples (int, optional): The number of examples to use in the agent's answer generation. Defaults to 3.
+            react (bool, optional): Whether the few shot examples should be ReAct examples. Defaults to True.
+            
         """
         self.name = name
         
@@ -122,6 +128,7 @@ You have interests in {interests_str}. You usually show the following attitude: 
         self.llm.set_system_prompt(self.prompt)
         self.agent_answers = []
         self.n_examples = n_examples
+        self.react = react
     
     def get_name(self):
         """
@@ -161,30 +168,43 @@ You have interests in {interests_str}. You usually show the following attitude: 
             formatted_last_messages_str.append(f"{message_n}. {agent}: {message}")
         formatted_last_messages_str = "\n".join(formatted_last_messages_str)
         
+        if self.react:
+            few_shot_examples = random.sample(react_examples, self.n_examples)
+            format='"Observation: Thought: Action: message ##"'
+            
+            # add quotes around the examples
+            few_shot_examples = [f"'{x}'" for x in few_shot_examples]
+            
+            # join the examples into a string with two new lines between each example
+            few_shot_examples_str = "\n\n".join(few_shot_examples)
+        else:
+            few_shot_examples = random.sample(example_messages, self.n_examples)
+            format='"message ##"'
+            # add quotes around the examples
+            few_shot_examples = [f"'{x}'" for x in few_shot_examples]
+            # add ## to the end of each example
+            few_shot_examples = [f"{x} ##" for x in few_shot_examples]
+            # join the examples into a string
+            few_shot_examples_str = "\n".join(few_shot_examples)
+
         
-        few_shot_examples = random.sample(example_messages, self.n_examples)
-        # put quotes around the examples
-        
-        # add ## to the end of each example
-        few_shot_examples = [f"{x} ##" for x in few_shot_examples]
-        few_shot_examples = [f"'{x}'" for x in few_shot_examples]
-        few_shot_examples_str = "\n".join(few_shot_examples)        
         
         seek_answer_prompt = f"""
-{basic_answer_generation_prompt}
+{basic_answer_generation_prompt if self.react==False else react_basic_answer_generation_prompt}
 The last messages (they are shown in the format "message_number. name: message") were:
 ###
 {formatted_last_messages_str}
 ###
 
-How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+How do you answer? Give your answer {"as you would text it," if self.react==False else ""} in the format {format}. End your answer with ##.  Some examples:
 
 {few_shot_examples_str}
-'message ##'
 
-Your answer:  
+{"'message ##'" if self.react==False else ""}
+
+{"Your answer:" if self.react==False else ""}\n
 ###
-{self.name}:"""
+{self.name+":" if self.react==False else ""}"""
         
         if extra_context != "":
             seek_answer_prompt = f"""{self.prompt}
@@ -202,6 +222,18 @@ Your answer:
             agent_answer = self.llm.generate_response(seek_answer_prompt)
             if agent_answer == "":
                 print("Empty answer returned. Retrying...")
+            if self.react:
+                # find the string between Action: and ## using regex
+                pattern = r"Action: (.*?)##"
+                matches = re.findall(pattern, agent_answer)
+                if matches:
+                    agent_answer = matches[-1]
+                    agent_answer = agent_answer + "##"
+                else:
+                    print("Invalid answer: no React style answer found. Retrying...")
+                    logging.info(f"Invalid answer: {agent_answer}.")
+                    agent_answer = ""
+                    continue
         
         self.agent_answers.append(agent_answer)
         return agent_answer
@@ -297,7 +329,7 @@ class ChatThread:
         other_agents_str = ", ".join([agent.get_name() for agent in other_agents])
         
         extra_context = f"""
-In this chat, there's you, {agent.get_name()}, and {other_agents_str}.
+In this chat, there's you ({agent.get_name()}) and {other_agents_str}.
 The converation should be implicitly steered towards the following goal:
 {self.chat_goal}. 
 """
@@ -311,6 +343,7 @@ The converation should be implicitly steered towards the following goal:
             ending_index = agent_answer.find(validation_ending)
             if ending_index == -1:
                 logging.info("Invalid answer. Retrying...")
+                logging.info(f"Invalid answer: {agent_answer}.")
                 continue
             else:
                 agent_answer = agent_answer[:ending_index]+ validation_ending
@@ -346,32 +379,44 @@ The converation should be implicitly steered towards the following goal:
         
         
         history_str = "\n".join([f"{x[1]}: {x[2]}" for x in self.chat_history[start_index:end_index]])
-        evaluation_prompt = eval_prompt
+        evaluation_prompt = eval_prompt.format(history_str=history_str)
         evaluation_answer = ""
         evaluation_count = 3
         total_evaluation = 0
 
         logging.info(evaluation_prompt)
+        
+        
+        # a re pattern to find "number/10" in the answer
+        pattern = r"\b(?:10|\d(?:\.\d+)?)\/10\b"
+        
+        
         for _ in range(evaluation_count):
             # check if the answer is a valid number
-            while not isinstance(evaluation_answer, int):
+            while not isinstance(evaluation_answer, float):
                 evaluation_answer = self.neutral_llm.generate_response(evaluation_prompt)
                 # try to trim the answer to remove everything after the validation ending
                 ending_index = evaluation_answer.find("##")
+                logging.info(f"Answer: {evaluation_answer}")
                 if ending_index == -1:
-                    logging.info("Invalid answer. Retrying...")
+                    logging.info("Invalid answer: no ## at the end. Retrying...")
                     continue
                 else:
                     evaluation_answer = evaluation_answer[:ending_index]
                 try:
-                    answer_candidate=evaluation_answer
+                    answer_candidate = evaluation_answer
                     
-                    # get rid of everything left of a newline
-                    evaluation_answer = evaluation_answer.split("\n")[-1]
-                    evaluation_answer = int(evaluation_answer.strip())
-                    logging.info(f"Answer: {answer_candidate}")
+                    # find "number/10" pattern in the answer
+                    matches = re.findall(pattern, evaluation_answer)
+                    if matches:
+                        rating = matches[-1]
+                        rating = rating.split("/")[0]
+                        evaluation_answer = float(rating)
+                    else:
+                        logging.info("Invalid answer: no rating found. Retrying...")
+                        continue
                 except:
-                    logging.info("Invalid answer. Retrying...")
+                    logging.info("Invalid answer: error while trying to find the rating. Retrying...")
                     continue
 
             total_evaluation += evaluation_answer
@@ -414,7 +459,7 @@ The converation should be implicitly steered towards the following goal:
         turn_count = self.turn_count
         
         
-        while self.turn_count <= max_turns:
+        while self.turn_count < max_turns:
             for agent in self.agent_list:
                 agent.run_routines(self.turn_count, self.chat_history)
                 
@@ -466,7 +511,7 @@ The converation should be implicitly steered towards the following goal:
 
 
 class MemoryAgent(Agent):
-    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_last_messages=10, n_examples=3):
+    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_last_messages=10, n_examples=3, react=True):
         """
         Initializes a Agent object with memory.
 
@@ -477,10 +522,14 @@ class MemoryAgent(Agent):
             interests (list, optional): The interests of the agent. Defaults to an empty list.
             behavior (list, optional): The behavior of the agent. Defaults to an empty list.
             n_last_messages (int, optional): The number of messages that gets considered when generating memories. Defaults to 10.
+            n_examples (int, optional): The number of examples to use in the agent's answer generation. Defaults to 3.
+            react (bool, optional): Whether the few shot examples should be ReAct examples. Defaults to True.
+            
         """
-        super().__init__(name, llm, prompt, interests, behavior, n_examples)
+        super().__init__(name, llm, prompt, interests, behavior, n_examples ,react)
         self.memory = Embeddings(content=True, gpu=False)
         self.n_last_messages = n_last_messages
+        
         
     def get_observations(self, last_messages):
         """
@@ -565,32 +614,43 @@ etc.
             formatted_last_messages_str.append(f"{message_n}. {agent}: {message}")
         formatted_last_messages_str = "\n".join(formatted_last_messages_str)
         
-        few_shot_examples = random.sample(example_messages, self.n_examples)
         
-        # add ## to the end of each example
-        few_shot_examples = [f"{x} ##" for x in few_shot_examples]
+        if self.react:
+            few_shot_examples = random.sample(react_examples, self.n_examples)
+            format='"Observation: Thought: Action: message ##"'
+            
+            # add quotes around the examples
+            few_shot_examples = [f"'{x}'" for x in few_shot_examples]
+            
+            # join the examples into a string with two new lines between each example
+            few_shot_examples_str = "\n\n".join(few_shot_examples)
+        else:
+            few_shot_examples = random.sample(example_messages, self.n_examples)
+            format='"message ##"'
+            # add quotes around the examples
+            few_shot_examples = [f"'{x}'" for x in few_shot_examples]
+            # add ## to the end of each example
+            few_shot_examples = [f"{x} ##" for x in few_shot_examples]
+            # join the examples into a string
+            few_shot_examples_str = "\n".join(few_shot_examples)
 
-        # put quotes around the examples
-        few_shot_examples = [f"'{x}'" for x in few_shot_examples]
-        
-        # make it a string
-        few_shot_examples_str = "\n".join(few_shot_examples)
-        
         
         seek_answer_prompt = f"""
-{basic_answer_generation_prompt}
+{basic_answer_generation_prompt if self.react==False else react_basic_answer_generation_prompt}
 The last messages in the chat were (they are shown in the format "message_number. name: message"): 
 ###
 {formatted_last_messages_str}
 ###
-How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+
+How do you answer? Give your answer {"as you would text it," if self.react==False else ""} in the format {format}. End your answer with ##.  Some examples:
 
 {few_shot_examples_str}
-'message ##'
+
+{"'message ##'" if self.react==False else ""}
 
 Your answer:          
 ###
-{self.name}:
+{self.name if self.react==False else ""}
 """
         
         if self.memory.isdense():   
@@ -606,10 +666,11 @@ The last messages in the chat were (they are shown in the format "message_number
 ###
 {formatted_last_messages_str}
 ###
-How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+How do you answer? Give your answer {"as you would text it," if self.react==True else ""} in the format {format}. End your answer with ##.  Some examples:
 
 {few_shot_examples_str}
-"message ##"
+
+{"'message ##'" if self.react==False else ""}
 
 In addition, you remember the following memories relevant to chat right now:
 {context}\n
@@ -621,15 +682,16 @@ Your answer:
             else:
                 seek_answer_prompt_with_context = f"""
 {self.prompt}\n
-{basic_answer_generation_prompt}
+{basic_answer_generation_prompt if self.react==False else react_basic_answer_generation_prompt}
 The last messages in the chat were (they are shown in the format "message_number. name: message"): 
 ###
 {formatted_last_messages_str}
 ###
-How do you answer? Give your answer as you would text it, in the format "message". End your answer with ##.  Some examples:
+
+How do you answer? Give your answer {"as you would text it," if self.react==False else ""} in the format {format}. End your answer with ##.  Some examples:
 
 {few_shot_examples_str}
-"message ##"
+{"'message ##'" if self.react==False else ""}
                 
 In addition, you remember the following memories relevant to chat right now:
 {context}\n
@@ -659,6 +721,19 @@ Your answer:
             agent_answer = self.llm.generate_response(seek_answer_prompt_with_context)
             if agent_answer == "":
                 print("Empty answer returned. Retrying...")
+            if self.react:
+                # find the string between Action: and ## using regex
+                pattern = r"Action: (.*?)##"
+                matches = re.findall(pattern, agent_answer)
+                if matches:
+                    agent_answer = matches[-1]
+                    # readd the validation ending
+                    agent_answer = agent_answer + "##"
+                else:
+                    print("Invalid answer: no React style answer found. Retrying...")
+                    logging.info(f"Invalid answer: {agent_answer}.")
+                    agent_answer = ""
+                    continue
         
         self.agent_answers.append(agent_answer)
         return agent_answer
@@ -694,7 +769,7 @@ Your answer:
 
 
 class ReflectingAgent(MemoryAgent):
-    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_last_messages=10, n_last_messages_reflection=20, n_examples=3):
+    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_last_messages=10, n_last_messages_reflection=20, n_examples=3, react=True):
         """
         Initializes a ReflectingAgent object, an agent that creates reflections from memories every n_last_messages_reflection turns.
         
@@ -706,10 +781,12 @@ class ReflectingAgent(MemoryAgent):
         behavior (list, optional): The behavior of the agent. Defaults to an empty list.
         n_last_messages (int, optional): The number of messages that gets considered when generating memories. Defaults to 10.
         n_last_messages_reflection (int, optional): The number of messages that gets considered when generating reflections. Defaults to 20.    
+        n_examples (int, optional): The number of examples to use in the agent's answer generation. Defaults to 3.
+        reflect (bool, optional): Whether the agent should reflect on the last n_last_messages_reflection memories. Defaults to True.
         
         
         """
-        super().__init__(name, llm, prompt, interests, behavior, n_last_messages, n_examples)
+        super().__init__(name, llm, prompt, interests, behavior, n_last_messages, n_examples, react)
         self.n_last_messages_reflection = n_last_messages_reflection
         
     def get_reflections(self, n_memories):
@@ -810,6 +887,7 @@ def load_agent(agent_dict):
         agent.memory.upsert(agent_dict["memories"])
     
     return agent
+
 
 def load_chat(chat_path):
     """
