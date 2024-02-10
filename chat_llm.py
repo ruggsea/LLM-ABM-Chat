@@ -12,7 +12,60 @@ logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", forma
 basic_answer_generation_prompt = """Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. 
 Provide your answer as you would text it. Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting.Avoid greeting people and saying hi if you have already greeted them before. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
 
+history_str=""
 
+
+
+
+
+
+eval_prompt=f"""
+You are a chat evaluator that specializes in evaluating the naturalness of chat conversations with harsh but fair ratings. Y
+You are evaluating a chat. You are evaluating the chat to see if this chat resembles a natural and believable conversation.
+The chat history is:
+###
+{history_str}
+###
+How do you evaluate the chat from 1 to 10? 1 being the worst and 10 being the best. Answer with your reasoning, followed by a newline and the final evaluation. End your answer with ##. So the format is:
+
+reason.\n number ##
+
+Answer:
+"""
+
+
+
+eval_prompt=f"""
+You are a chat evaluator that specializes in evaluating the naturalness and believability of chat conversations with harsh but fair ratings. Your expertise is in assessing conversations using specific criteria to determine how closely they resemble a natural and believable human conversation. For this task, you will focus on the following criteria:
+
+1. Natural Language Understanding (NLU) - Does the chat demonstrate a clear understanding of the nuances of human language, including slang, idioms, and colloquial expressions?
+2. Contextual Relevance - Does the chat maintain coherence and context throughout the conversation?
+3. Emotional Intelligence - Does the chat detect and respond appropriately to the emotional content of the conversation?
+4. Conversational Flow - Does the conversation flow smoothly without awkward pauses or abrupt topic changes?
+5. Adaptability - Can the chat adapt to different styles of communication and handle unexpected inputs gracefully?
+
+Please evaluate the following chat history:
+
+####
+{history_str}
+####
+
+For each of the criteria above, provide a brief reasoning for your rating on a scale from 1 to 10, where 1 is the worst and 10 is the best. Then, give an overall rating based on your analysis of these criteria. Your response should follow this format:
+
+1. NLU: Reasoning.\nRating.
+2. Contextual Relevance: Reasoning.\nRating.
+3. Emotional Intelligence: Reasoning.\nRating.
+4. Conversational Flow: Reasoning.\nRating.
+5. Adaptability: Reasoning.\nRating.
+
+Final Evaluation: After considering each criterion, summarize your overall assessment of the chat's naturalness and believability. Provide a final rating from 1 to 10, where 1 is the worst and 10 is the best.
+
+Final Evaluation Reasoning.\nFinal Rating ##
+
+End your answer with ##.
+
+Answer:
+"""
 
 
 # caching the messages dataset
@@ -293,19 +346,7 @@ The converation should be implicitly steered towards the following goal:
         
         
         history_str = "\n".join([f"{x[1]}: {x[2]}" for x in self.chat_history[start_index:end_index]])
-        evaluation_prompt = f"""
-You are a chat evaluator that specializes in evaluating the naturalness of chat conversations with harsh but fair ratings. Y
-You are evaluating a chat. You are evaluating the chat to see if this chat resembles a natural and believable conversation.
-The chat history is:
-###
-{history_str}
-###
-How do you evaluate the chat from 1 to 10? 1 being the worst and 10 being the best. Answer with your reasoning, followed by a newline and the final evaluation. End your answer with ##. So the format is:
-
-reason.\n number ##
-
-Answer:
-"""
+        evaluation_prompt = eval_prompt
         evaluation_answer = ""
         evaluation_count = 3
         total_evaluation = 0
@@ -362,8 +403,7 @@ Answer:
             list: The chat history.
         """
         self.start_conversation()
-        self.render_last_message()
-        max_turns = max_turns + len(self.chat_history)
+        self.render_last_message() 
 
         starting_agent_name = self.chat_history[0][1]
         starting_agent = [agent for agent in self.agent_list if agent.get_name() == starting_agent_name][0]
