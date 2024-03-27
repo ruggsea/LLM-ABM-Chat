@@ -1,0 +1,6 @@
+[Memory]
+
+In addition, you remember the following things relevant to the last messages in the chat:
+
+{memory_list_str}
+

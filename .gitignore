@@ -3,4 +3,7 @@
 .env 
 *.json
 *.log
-
+*.zip
+*.xml
+/fewshots_mpc/MPC CORPUS/
+/fits_personas/fits/

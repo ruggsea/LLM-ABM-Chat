@@ -1,0 +1,10 @@
+[Profile]
+
+{profile}
+
+[Setting]
+
+[Personal Goal]
+
+{personal_goal}
+

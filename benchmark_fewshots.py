@@ -5,7 +5,7 @@
 # create some partials for the agents 
 
 from chat_llm import ReflectingAgent, ChatThread, load_chat
-from llm_engines import LLMApi
+from llm_engines import LLMApi, ChatgptLLM
 from functools import partial
 
 
@@ -23,10 +23,13 @@ n_examples = [1,2,3,5,10,15,20,25]
 for n in n_examples:
     john = john_partial(n_examples=n)
     mary = mary_partial(n_examples=n)
+    mary_react_off = mary_partial(n_examples=n, react=False)
+    john_react_off = john_partial(n_examples=n, react=False)
+
     # run 10 chat per configuration
-    for i in range(10):
-        chat = ChatThread(agent_list=[john,mary], neutral_llm=LLMApi(), n_eval=25)
-        chat.run_chat(max_turns=75)
+    for i in range(5):
+        chat = ChatThread(agent_list=[john,mary], neutral_llm=ChatgptLLM(), n_eval=25)
+        chat.run_chat(max_turns=50)
         
         try:
             # find latest chat in the chat_logs folder
@@ -41,5 +44,22 @@ for n in n_examples:
         except:
             continue
 
+    # the same but with react turned off
+    for i in range(5):
+        chat = ChatThread(agent_list=[john_react_off,mary_react_off], neutral_llm=ChatgptLLM(), n_eval=25)
+        chat.run_chat(max_turns=50)
+        
+        try:
+            # find latest chat in the chat_logs folder
+            chat_logs = os.listdir("chat_logs")
+            # add folder to the path
+            chat_logs = [os.path.join("chat_logs",chat) for chat in chat_logs]
+            chat_logs.sort(key=os.path.getmtime, reverse=True)
+            latest_chat = chat_logs[0]
+            
+            print(f"Chat {i} with {n} examples completed. Chat log saved at {latest_chat}")
+            
+        except:
+            continue
 
 

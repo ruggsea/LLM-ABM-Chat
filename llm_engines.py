@@ -85,6 +85,9 @@ class LLMApi(LLM):
     
     def generate_response(self, user_prompt):
         
+        assistant_message = ""
+
+        
         # append user prompt to history
         self.history.append({"role":"user","content": user_prompt})
         # query api for response
@@ -112,25 +115,37 @@ class ChatgptLLM(LLM):
         super().__init__(history)
         self.url = "https://api.openai.com/v1/chat/completions" 
         self.headers = headers
+        self.model = "gpt-3.5-turbo"
+        self.temperature = None
     
     def generate_response(self, user_prompt):
         
-        self.history.append({"role":"user","content": user_prompt})
-        # query api for response, model is gpt 3.5 turbo
-        data = {
-        "model": "gpt-3.5-turbo-1106",
-        "messages": self.history
-        }
-        response = requests.post(self.url, headers=openai_headers, json=data, verify=False)
+        assistant_message = ""
         
-        assistant_message = response.json()['choices'][0]['message']['content']
-        self.history.append({"role": "assistant", "content": assistant_message})
-        
-        
-        
+        try:
+            self.history.append({"role":"user","content": user_prompt})
+            # query api for response, model is gpt 3.5 turbo
+            data = {
+                "model": self.model,
+                "messages": self.history
+            }
+            
+            if self.temperature is not None:
+                data["temperature"] = self.temperature
+            response = requests.post(self.url, headers=openai_headers, json=data, verify=False)
+            
+            assistant_message = response.json()['choices'][0]['message']['content']
+            self.history.append({"role": "assistant", "content": assistant_message})
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            return assistant_message
+
+
+
         # clear history if assistant message is not empty
         if self.system_prompt != "":
             self.history = self.history[:1]
         else:
             self.history = []
-        return assistant_message       
+            
+        return assistant_message

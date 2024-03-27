@@ -1,8 +1,7 @@
 
-from llm_engines import LLMApi
+from llm_engines import LLMApi, ChatgptLLM, LLM
 import random, textwrap, logging, requests, json, os, time, re
 from txtai import Embeddings
-
 
 
 logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
@@ -10,18 +9,18 @@ logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", forma
 
 
 basic_answer_generation_prompt = """Send a message to the group. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. 
-Provide your answer as you would text it. Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting.Avoid greeting people and saying hi if you have already greeted them before. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
+Provide your answer as you would text it. Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting. Avoid greeting people and saying hi if you have already greeted them before. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
 
 
 react_basic_answer_generation_prompt = """Come up with a message to send to the group by first generating an observation and a thought. Keep your answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. 
-Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting.Avoid greeting people and saying hi if you have already greeted them before
+Do not send links, images and videos in your messages and don't sign your messages. Do not use markdown formatting. Avoid greeting people and saying hi if you have already greeted them before
 Keep your message answers short and casual and do not sound too excited but try to keep the conversationg going as much as possible. Be creative and engaging. Also, avoid saying bye because we don't want the chat to end. Each message should be shorter than 500 characters\n"""
 
 
 
 
-eval_prompt="""
-You are a chat evaluator that specializes in evaluating the naturalness of chat conversations with harsh but fair ratings. Y
+simple_eval_prompt="""
+You are a chat evaluator that specializes in evaluating the naturalness of chat conversations with harsh but fair ratings.
 You are evaluating a chat. You are evaluating the chat to see if this chat resembles a natural and believable conversation.
 The chat history is:
 ###
@@ -51,7 +50,7 @@ Please evaluate the following chat history:
 {history_str}
 ####
 
-For each of the criteria above, provide a brief assessment. Then, give an overall rating based on your analysis of these criteria from 1 to 10, where 1 is the worst and 10 is the. Your response should follow this format:
+For each of the criteria above, provide a brief assessment. Then, give an overall rating based on your analysis of these criteria in a continuous scale from 1 to 10, where 1 is the worst and 10 is the best. Your response should follow this format:
 
 1. NLU: Reasoning.
 2. Contextual Relevance: Reasoning. 
@@ -60,7 +59,7 @@ For each of the criteria above, provide a brief assessment. Then, give an overal
 5. Adaptability: Reasoning.
 
 Final Evaluation Reasoning.
-Final Rating: 
+Overall Rating: 
 number/10##
 
 End your answer with ##.
@@ -94,7 +93,7 @@ with open("react_examples.json", "r") as f:
     react_examples = json.load(f)
 
 class Agent:
-    def __init__(self, name, llm, prompt="", interests=[], behavior=[], n_examples=3, react=True): 
+    def __init__(self, name, llm:LLM=LLMApi(), prompt="", interests=[], behavior=[], n_examples=3, react=True): 
         """
         Initializes an Agent object.
 
@@ -151,7 +150,7 @@ You have interests in {interests_str}. You usually show the following attitude: 
     
 
     
-    def get_answer(self, last_messages, extra_context=""):
+    def get_answer(self, last_messages, extra_context="", **kwargs):
         """
         Generates an answer from the agent given the last messages in the chat.
 
@@ -256,7 +255,7 @@ How do you answer? Give your answer {"as you would text it," if self.react==Fals
         Returns:
             dict: The agent's data.
         """
-        agent_data = {"name": self.name, "prompt": self.prompt, "agent_answers": self.agent_answers , "type":self.__class__.__name__, "n_examples": self.n_examples, "interests": self.interests, "behavior": self.behavior, "llm": self.llm.__class__.__name__}
+        agent_data = {"name": self.name, "prompt": self.prompt, "agent_answers": self.agent_answers , "type":self.__class__.__name__, "n_examples": self.n_examples, "interests": self.interests, "behavior": self.behavior, "llm": self.llm.__class__.__name__ , "react":self.react}
         return agent_data
 
 
@@ -328,17 +327,20 @@ class ChatThread:
     
         other_agents_str = ", ".join([agent.get_name() for agent in other_agents])
         
+        
+        
         extra_context = f"""
 In this chat, there's you ({agent.get_name()}) and {other_agents_str}.
 The converation should be implicitly steered towards the following goal:
 {self.chat_goal}. 
-"""
+"""     
+
         # check if the answer fits the validation criteria
         
         validation_ending="##"
         agent_answer = ""
         while not agent_answer.endswith(validation_ending):
-            agent_answer = agent.get_answer(last_messages=last_messages, extra_context=extra_context)
+            agent_answer = agent.get_answer(last_messages=last_messages, extra_context=extra_context, chat_goal=self.chat_goal, agent_list=other_agents_str, n_agents=len(self.agent_list))
              # trim the answer to remove everything after the validation ending
             ending_index = agent_answer.find(validation_ending)
             if ending_index == -1:
@@ -596,7 +598,7 @@ etc.
         """
         self.memory.upsert(observations_list)
         
-    def get_answer(self, last_messages, extra_context=""):
+    def get_answer(self, last_messages, extra_context="", **kwargs):
         """
         Generates an answer from the agent enriching the context with observations from memory.
 
@@ -865,6 +867,8 @@ def load_agent(agent_dict):
     
     """
     
+    from advanced_agents import AdvancedAgent
+
     # construct an agent from the dictionary
     
     # first, the llm
@@ -876,15 +880,42 @@ def load_agent(agent_dict):
     agent_type = agent_dict["type"]
     agent_name = agent_dict["name"]
     agent_prompt = agent_dict["prompt"]
-    agent_interests = agent_dict["interests"]
-    agent_behavior = agent_dict["behavior"]
-    agent_n_examples = agent_dict["n_examples"]
+    try:
+        agent_interests = agent_dict["interests"]
+    except KeyError:
+        agent_interests = []
+
+    try:
+        agent_behavior = agent_dict["behavior"]
+    except KeyError:
+        agent_behavior = []
+
+    try:
+        agent_n_examples = agent_dict["n_examples"]
+    except KeyError:
+        agent_n_examples = 3
+    
+    # try loading react
+    try:
+        agent_react = agent_dict["react"]
+    except:
+        agent_react = False
+    
+
+    
     
     if agent_type == "Agent":
         agent = Agent(agent_name, llm, prompt=agent_prompt, interests=agent_interests, behavior=agent_behavior, n_examples=agent_n_examples)
     else:
-        agent=eval(agent_type)(agent_name, llm, prompt=agent_prompt, interests=agent_interests, behavior=agent_behavior, n_examples=agent_n_examples)
-        agent.memory.upsert(agent_dict["memories"])
+        try:
+            agent=eval(agent_type)(agent_name, llm, prompt=agent_prompt, interests=agent_interests, behavior=agent_behavior, n_examples=agent_n_examples, n_last_messages=agent_dict["n_last_messages"])
+        except:
+            agent=eval(agent_type)(agent_name, llm, personal_goal=agent_dict["personal_goal"], profile=agent_dict["profile"], n_examples=agent_n_examples, n_last_messages=agent_dict["n_last_messages"], n_last_messages_reflection=agent_dict["n_last_messages_reflection"])
+        finally:
+            agent.memory.upsert(agent_dict["memories"])
+    
+    
+    
     
     return agent
 
@@ -897,6 +928,8 @@ def load_chat(chat_path):
     chat_dict (dict): The dictionary containing the chat data.
     
     """
+    
+    
     
     with open(chat_path, "r") as f:
         chat_dict = json.load(f)
@@ -914,5 +947,7 @@ def load_chat(chat_path):
     chat.chat_history = chat_dict["chat_history"]
     chat.chat_evaluation = chat_dict["chat_evaluation"]
     chat.chat_id = chat_dict["chat_id"]
+
+    
     
     return chat

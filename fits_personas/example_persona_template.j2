@@ -1,0 +1,6 @@
+Imagine you are creating the description of a person. Your task is to write a short but detailed description of a persona based on the following elements:
+
+- Domains: {% for domain in domains %}{{ domain }}{% if not loop.last %}, {% endif %}{% endfor %}
+- Topics of Interest: {% for topic in topics %}{{ topic }}{% if not loop.last %}, {% endif %}{% endfor %}
+
+Be detailed and creative in your description, especially in subtly implementing the Topics and Domains. Keep it short (one paragraph) but detailed. The agent should be a human person with a realistic personality, not a robot. Write it in the third person. Be realistic: don't be too extreme in your description, nor vaguee and overly positive. Try to weave the elements together in a coherent way, maybe making up short background stories or anecdotes; be sure to include all of the topics. Do not explicitly mention its profession or other demographic details. Make up some attitude for the person, like "formal", "friendly", "curious", "serious", etc. Make up a name for the person, but substitute it with "$name$" in the text and use neutral pronouns (they, their, them) to refer to them.
