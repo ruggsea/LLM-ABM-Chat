@@ -1,0 +1,20 @@
+Given the following messages, generate few-shot learning example in the 15-act dialogue act taxonomy in the ReAct format:
+
+Examples in the target format: 
+
+{% for example in pre_examples -%}
+{{ example }}
+{% endfor %}
+
+
+
+
+Messages to use for generation:
+
+{% for message in messages -%}
+{{ message }}
+{% endfor %}
+
+
+
+Output:

@@ -40,6 +40,13 @@ def main():
     print("Filtering out empty dialog acts")
     df = df[df.dialog_act!=""]
     #
+    # take out prefix from dialog act
+    df['dialog_act'] = df['dialog_act'].apply(lambda x: x.split(":")[1])
+    
+    # keep only text, speaker and dialog_act
+    df = df[['text', 'speaker', 'dialog_act']]
+    
+    
     print("Saving to jsonl")
     df.to_json("mpc_messages.jsonl", orient='records', lines=True)
 

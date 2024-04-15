@@ -867,7 +867,7 @@ def load_agent(agent_dict):
     
     """
     
-    from advanced_agents import AdvancedAgent
+    from advanced_agent import AdvancedAgent
 
     # construct an agent from the dictionary
     
