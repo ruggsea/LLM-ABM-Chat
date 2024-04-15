@@ -76,13 +76,19 @@ class DialogueReactAgent(ReflectingAgent):
         else:
             optional_memory = ""
         
-        print(self.prompt.render(persona=self.persona, 
-                                 last_messages=last_messages,
-                                 extra_context=extra_context,
-                                 other_agents=other_agents,
-                                 n_agents=n_agents,
-                                 dialogue_acts=self.dialogue_acts,
-                                 optional_memory=optional_memory))
+        # render template
+        prompt = self.prompt.render(
+            last_messages=last_messages,
+            optional_memory=optional_memory,
+            extra_context=extra_context,
+            other_agents=other_agents,
+            n_agents=n_agents
+        )
+        
+        # get the answer
+        answer = self.llm.generate_response(prompt)
+        
+        return answer
         
 
 def main():
