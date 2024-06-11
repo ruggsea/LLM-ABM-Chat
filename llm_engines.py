@@ -92,7 +92,7 @@ class LLMApi(LLM):
         self.history.append({"role":"user","content": user_prompt})
         # query api for response
         data = {
-        "mode": "instruct",
+        "mode":  "instruct",
         "messages": self.history,
         }
         response = requests.post(url, headers=headers, json=data, verify=False, )
@@ -137,7 +137,10 @@ class ChatgptLLM(LLM):
             assistant_message = response.json()['choices'][0]['message']['content']
             self.history.append({"role": "assistant", "content": assistant_message})
         except Exception as e:
-            print(f"An error occurred: {str(e)}")
+            # print the response code and error message
+            print(response.status_code)
+            print(response.json())
+            
             return assistant_message
 
 
