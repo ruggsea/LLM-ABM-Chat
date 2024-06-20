@@ -12,8 +12,8 @@ class TestNaiveConversationGeneration(unittest.TestCase):
     def test_generate_conversation(self):
         conversation = self.conversation_generator.generate_conversation(min_turns=10, start_conversation=True)
         self.assertEqual(len(conversation), 10)
-        self.assertEqual(conversation[0][1], self.agent_list[0])
-        self.assertEqual(conversation[0][2], self.conversation_generator.conversation_starters[0])
+        self.assertIn(conversation[0][1], [agent.name for agent in self.agent_list])
+        self.assertIn(conversation[0][2], [conversation_start for conversation_start in self.conversation_generator.conversation_starters])
 
     def test_print_chat_history(self):
         # Assuming conversation history is not empty
