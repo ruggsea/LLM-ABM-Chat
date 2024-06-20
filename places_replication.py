@@ -146,7 +146,7 @@ class NaiveConversationGeneration:
         # keep generating until you have a conversation of min max_turns length
         
         while conversation_len < min_turns:
-            conversation_len = 0 if start_conversation else 1
+            conversation_len = 1 if start_conversation else 0
             
             # reset the chat history for each turn
             temp_chat_history = []
