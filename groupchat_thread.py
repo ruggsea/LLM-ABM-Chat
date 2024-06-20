@@ -7,6 +7,9 @@ eval_prompt=load_base_prompt("prompts/chat_evaluation.j2")
 logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
 
 class GroupchatThread:
+    """
+    A group chat thread that simulates a conversation between multiple agents.    
+    """
     def __init__(self, agent_list=[], neutral_llm=LLMApi(), sel_method="random", n_eval=10):
         """
         Initializes a ChatThread object.
@@ -95,12 +98,12 @@ class GroupchatThread:
         assert len(self.chat_history) > 0, "There are no messages in the chat history."
         
         last_message = self.chat_history[-1]
-        n_message, agent, message =  last_message[0], last_message[1], last_message[2]
+        n_message, agent_name, message =  last_message[0], last_message[1], last_message[2]
         
         # color agent name based on agent index
-        agent_color = self.agent_colors[agent]
+        agent_color = self.agent_colors[agent_name]
         # print message
-        msg_string = f"{agent_color}{agent}\033[0m: {message}"
+        msg_string = f"{agent_color}{agent_name}\033[0m: {message}"
         
         wrapped_message = textwrap.fill(msg_string, width=80, subsequent_indent=' ' * 4)
         print(wrapped_message)
@@ -148,8 +151,15 @@ class GroupchatThread:
         print(f"Chat evaluation: {eval_score}")
         return eval_score
         
-            
+    def save_chat_history(self, folder:str="chat_history"):
+        """Save the chat history to a JSON file."""
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        with open(f"{folder}/react_chat_history_{self.chat_id}.json", "w") as f:
+            json.dump(self.chat_history, f)
         
+
+
     def dump_chat(self):
         """
         Dumps the chat history to a JSON file.
@@ -216,6 +226,10 @@ class GroupchatThread:
         if self.n_eval != -1:
             self.evaluate_chat()
         
+        # save chat history
+        self.save_chat_history()
+        
+        # dump chat data        
         self.dump_chat()
         
         return self.chat_history
