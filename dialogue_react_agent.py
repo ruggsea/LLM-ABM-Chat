@@ -34,8 +34,14 @@ def read_dialogue_act_list(file_path:str):
     return dialogue_acts
 
 dialogue_acts_taxonomy=load_dialogue_act_taxonomy("prompts/dialogue_taxonomy.txt")
-dialogue_react_fewshots = load_dialogue_react_fewshots("fewshots_mpc/generated_dialogue_reacts.jsonl")    
+dialogue_react_fewshots = load_dialogue_react_fewshots("fewshots_mpc/generated_dialogue_reacts.jsonl")  
+dialogue_react_fewshots_no_dialogue=load_dialogue_react_fewshots("fewshots_mpc/generated_dialogue_reacts_no_dialogue.jsonl")
+# loading the prompts
 prompt_template = load_base_prompt("prompts/dialogue_react_generation.j2")
+prompt_template_no_dialogue_no_react = load_base_prompt("prompts/dialogue_react_generation_no_dialogue_no_react.j2")
+prompt_template_no_dialogue = load_base_prompt("prompts/dialogue_react_generation_no_dialogue.j2")
+
+
 memory_template = load_base_prompt("prompts/memory_generation.j2")
 reflection_template = load_base_prompt("prompts/reflection_generation.j2")
 dialogue_acts_list=read_dialogue_act_list("prompts/dialogue_acts.json")
@@ -47,7 +53,7 @@ logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", forma
 
 
 class DialogueReactAgent(ReflectingAgent):
-    def __init__(self, name:str, persona:str, llm:LLM=LLMApi(),memory_freq:int=25, reflections_freq:int=50, n_fewshots:int=5):
+    def __init__(self, name:str, persona:str, llm:LLM=LLMApi(),memory_freq:int=25, reflections_freq:int=50, n_fewshots:int=5, ablation:str=None):
         """
         Initializes the DialogueReactAgent object.
 
@@ -58,6 +64,7 @@ class DialogueReactAgent(ReflectingAgent):
             memory_freq (int): The frequency of memory updates (memories are generated every memory_freq turns).
             reflections_freq (int): The frequency of reflections (reflections are generated evert reflections_freq turns).
             n_fewshots (int): The number of few-shot examples.
+            ablation (str): The ablation type. Should be one of None, "no_dialogue_no_react", "no_dialogue".
 
         Returns:
             None
@@ -69,13 +76,27 @@ class DialogueReactAgent(ReflectingAgent):
         self.reflections_freq = reflections_freq
         self.n_fewshots = n_fewshots
         self.memory = Embeddings(content=True, gpu=False)
-        self.prompt = prompt_template
+        
         
         ## add the dialogue act taxonomy to the agent
         self.dialogue_acts_taxonomy = dialogue_acts_taxonomy
         ## dialogue act list 
         self.dialogue_acts = dialogue_acts_list
-     
+
+        # possible ablations
+        ablation_types = ["no_dialogue_no_react", "no_dialogue"]
+        if ablation != None and ablation not in ablation_types:
+            assert ablation is None, f"Invalid ablation type: {ablation}."
+        else:
+            self.ablation = ablation    
+            
+        if self.ablation == None:
+            self.prompt = prompt_template
+        elif self.ablation == "no_dialogue_no_react":
+            self.prompt = prompt_template_no_dialogue_no_react
+        elif self.ablation == "no_dialogue":
+            self.prompt = prompt_template_no_dialogue
+        
     def gen_memories(self, last_messages, n_memories, **kwargs):
         """
         Generates a memory based on the last messages.
@@ -231,57 +252,131 @@ class DialogueReactAgent(ReflectingAgent):
         # format the messages into a list of strings in the format "Agent: message"
         last_messages = [f"{x[1]}: {x[2]}" for x in last_messages]
         
-        # render template
-        prompt = self.prompt.render(
-            name=self.name,
-            persona=self.persona,
-            last_messages=last_messages,
-            optional_memory=optional_memory,
-            agent_list=agent_list,
-            observation_thought_action_examples_list=dialogue_react_fewshots_sample,
-            n_agents=n_agents,
-            dialogue_acts_taxonomy=dialogue_acts_taxonomy
-        )
+        
+        if self.ablation == None:
+            # render template
+            prompt = self.prompt.render(
+                name=self.name,
+                persona=self.persona,
+                last_messages=last_messages,
+                optional_memory=optional_memory,
+                agent_list=agent_list,
+                observation_thought_action_examples_list=dialogue_react_fewshots_sample,
+                n_agents=n_agents,
+                dialogue_acts_taxonomy=dialogue_acts_taxonomy
+            )
+        elif self.ablation == "no_dialogue_no_react":
+            messages_pre_react=random.sample(dialogue_react_fewshots,1)[0]["messages"]
+            # messages is an array containing text and speaker, it should be put in the format "Speaker: text\nSpeaker: text\n...Speaker: text\n"
+            dialogue_react_fewshots_sample="\n".join([f"{x['speaker']}: {x['text']}" for x in messages_pre_react])
+            # render template
+            prompt = self.prompt.render(
+                name=self.name,
+                persona=self.persona,
+                last_messages=last_messages,
+                optional_memory=optional_memory,
+                agent_list=agent_list,
+                examples_list_no_dialogue_no_react=dialogue_react_fewshots_sample,
+                n_agents=n_agents,
+            )
+        elif self.ablation == "no_dialogue":
+            dialogue_react_fewshots_sample=random.sample(dialogue_react_fewshots_no_dialogue,1)[0]["generated_response"]
+            prompt = self.prompt.render(
+                name=self.name,
+                persona=self.persona,
+                last_messages=last_messages,
+                optional_memory=optional_memory,
+                agent_list=agent_list,
+                observation_thought_action_examples_list=dialogue_react_fewshots_sample,
+                n_agents=n_agents,
+            )
         
         # log rendered prompt
         logging.info(f"Answer generation prompt: {prompt}")
         
-        # get the answer
-        while True:
-            ## the answer is generated by the llm and should be in the format
-            ## Observation: <observation> 
-            # Thought: <thought> 
-            # Action: <action>
-            try:
-                answer_candidate = self.llm.generate_response(prompt)
-                ## find the observation, thought and action
-                observation = re.findall(r"Observation: (.*?)\n", answer_candidate)
-                thought = re.findall(r"Thought: (.*?)\n", answer_candidate)
-                action = re.findall(r"Action: (.*?)\#\#", answer_candidate)
-                ## check that we have exactly one observation, thought and action
-                if len(observation)==1 and len(thought)==1 and len(action)==1:
-                    ## check that thought is a dialogue act
-                    observation = observation[0].strip()
-                    thought = thought[0].strip()
-                    action = action[0].strip()
-                    if thought not in self.dialogue_acts:
-                        logging.info(f"Invalid dialogue act: {thought}.")
-                        continue
-                    answer = action
-                    #print(f"Valid answer: {answer_candidate}.")
-                    logging.info(f"Valid dialogue_act: {thought}.")
-                    logging.info(f"Valid answer: {answer}.")
-                    break
-                else:
+        # get the answer for the dialogue react method
+        if self.ablation == None:
+            while True:
+                ## the answer is generated by the llm and should be in the format
+                ## Observation: <observation> 
+                # Thought: <thought> 
+                # Action: <action>
+                try:
+                    answer_candidate = self.llm.generate_response(prompt)
+                    ## find the observation, thought and action
+                    observation = re.findall(r"Observation: (.*?)\n", answer_candidate)
+                    thought = re.findall(r"Thought: (.*?)\n", answer_candidate)
+                    action = re.findall(r"Action: (.*?)\#\#", answer_candidate)
+                    ## check that we have exactly one observation, thought and action
+                    if len(observation)==1 and len(thought)==1 and len(action)==1:
+                        ## check that thought is a dialogue act
+                        observation = observation[0].strip()
+                        thought = thought[0].strip()
+                        action = action[0].strip()
+                        if thought not in self.dialogue_acts:
+                            logging.info(f"Invalid dialogue act: {thought}.")
+                            continue
+                        answer = action
+                        #print(f"Valid answer: {answer_candidate}.")
+                        logging.info(f"Valid dialogue_act: {thought}.")
+                        logging.info(f"Valid answer: {answer}.")
+                        break
+                    else:
+                        logging.info(f"Invalid answer: {answer_candidate}.")
+                except Exception as e:
+                    logging.info(f"Error generating response: {e}.")
                     logging.info(f"Invalid answer: {answer_candidate}.")
-            except Exception as e:
-                logging.info(f"Error generating response: {e}.")
-                logging.info(f"Invalid answer: {answer_candidate}.")
-                
-        answer_with_dialogueAct = f"Following the observation: {observation}, I wanted to commit the following dialogue act: {thought}. Therefore, I wrote the message: {action}."                
-        ## save the answer in memory
-        self.memory.upsert([{"turn_count":turn_count, "text":answer_with_dialogueAct}])
-        
+                    
+            answer_with_dialogueAct = f"Following the observation: {observation}, I wanted to commit the following dialogue act: {thought}. Therefore, I wrote the message: {action}."                
+            ## save the answer in memory
+            self.memory.upsert([{"turn_count":turn_count, "text":answer_with_dialogueAct}])
+        # generate answer for the ablation no_dialogue
+        elif self.ablation == "no_dialogue":
+            while True:
+                ## the answer is generated by the llm and should be in the format
+                ## Observation: <observation> 
+                # Thought: <thought> 
+                # Action: <action>
+                try:
+                    answer_candidate = self.llm.generate_response(prompt)
+                    ## find the observation, thought and action
+                    observation = re.findall(r"Observation: (.*?)\n", answer_candidate)
+                    thought = re.findall(r"Thought: (.*?)\n", answer_candidate)
+                    action = re.findall(r"Action: (.*?)\#\#", answer_candidate)
+                    ## check that we have exactly one observation, thought and action
+                    if len(observation)==1 and len(thought)==1 and len(action)==1:
+                        # same as before, but without the dialogue act check
+                        observation = observation[0].strip()
+                        thought = thought[0].strip()
+                        action = action[0].strip()
+                        answer = action
+                        logging.info(f"Valid answer: {answer}.")
+                        break
+                    else:
+                        logging.info(f"Invalid answer: {answer_candidate}.")
+                except Exception as e:
+                    logging.info(f"Error generating response: {e}.")
+                    logging.info(f"Invalid answer: {answer_candidate}.")
+        # generate answer for the ablation no_dialogue_no_react
+        elif self.ablation == "no_dialogue_no_react":
+            # in this case, the message is a string that ends with ##
+            while True:
+                try:
+                    answer_candidate = self.llm.generate_response(prompt)
+                    if answer_candidate.endswith("##"):
+                        answer = answer_candidate
+                        # remove the ##
+                        answer = answer[:-2]
+                        logging.info(f"Valid answer: {answer}.")
+                        break
+                    else:
+                        logging.info(f"Invalid answer: {answer_candidate}.")
+                except Exception as e:
+                    logging.info(f"Error generating response: {e}.")
+                    logging.info(f"Invalid answer: {answer_candidate}.")
+            ## save the answer in memory
+            self.memory.upsert([{"turn_count":turn_count, "text":answer}])
+
         return answer
       
     def run_routines(self, turn_count, chat_history, agent_list, n_agents):
@@ -323,7 +418,7 @@ class DialogueReactAgent(ReflectingAgent):
 
 def main():
     # Create an instance of the DialogueReactAgent
-    agent = DialogueReactAgent("Agent", LLMApi(), "John Doe", 0.5, 0.2, 5)
+    agent = DialogueReactAgent("Agent", "A good person",LLMApi(), 0.5, 0.2, 5)
 
     # Perform some tests
     print(agent.llm)
@@ -337,8 +432,13 @@ def main():
     #                  agent_list=["Agent1", "Agent2"],
     #                  n_agents=2,
     #                  turn_count=3)
-    
-    
+    # test the ablation no_dialogue
+    agent=DialogueReactAgent("Agent", "A good person that likes golf",LLMApi(), 0.5, 0.2, 5, "no_dialogue")
+    answer = agent.get_answer([("Agent1", "Hello", "How are you?")],
+                     agent_list=["Agent1", "Agent2"],
+                     n_agents=2,
+                     turn_count=3)
+    print(answer)
 if __name__ == "__main__":
     main()
         

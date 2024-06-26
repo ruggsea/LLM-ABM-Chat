@@ -1,5 +1,5 @@
 {% for example in few_shot_examples %}
 {{ example }}
 {% endfor %}
-The following is a conversation between {% for name in agent_names %}{% if not loop.first %}{% if loop.last %} and {% else %}, {% endif %}{% endif %}{{ name }}{% endfor %}. {% for persona in agent_personas %}{{ persona }}. {% endfor %}
+The following is a conversation between {% for name in agent_names %}{% if not loop.first %}{% if loop.last %} and {% else %}, {% endif %}{% endif %}{{ name }}{% endfor %}. {% for persona in agent_personas %}{{ persona }}. {% endfor %} 
 {{ conversation_starter_string }}\n

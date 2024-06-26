@@ -141,12 +141,12 @@ class NaiveConversationGeneration:
         
         # the answer should a list of strings, one message per line until the max_turns is reached
         
-        conversation_len=0
+        self.turn=0
         
         # keep generating until you have a conversation of min max_turns length
         
-        while conversation_len < min_turns:
-            conversation_len = 1 if start_conversation else 0
+        while self.turn < min_turns:
+            self.turn = 1 if start_conversation else 0
             
             # reset the chat history for each turn
             temp_chat_history = []
@@ -165,7 +165,6 @@ class NaiveConversationGeneration:
                     if agent_name in [agent.name for agent in self.agent_list]:
                         temp_chat_history.append((self.turn, agent_name, message))
                         self.turn += 1
-                        conversation_len += 1
                     else:
                         assert False, f"Invalid agent name in the answer: {agent_name}"                        
                 except:
@@ -173,7 +172,7 @@ class NaiveConversationGeneration:
                     # finish the for loop
                     break
                 
-            if conversation_len < min_turns:
+            if self.turn < min_turns:
                 logging.info(f"Conversation {self.chat_id} with {len(temp_chat_history)} turns generated, but it is too short.")                    
                 
         logging.info(f"Conversation {self.chat_id} with {len(temp_chat_history)} turns generated.")
@@ -188,6 +187,8 @@ class NaiveConversationGeneration:
         
         # dump chat logs
         self.dump_chat()
+        
+        self.print_chat_history()
         
         return self.chat_history
     
