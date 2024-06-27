@@ -9,7 +9,7 @@ import transformers
 import json
 import evaluate
 import string
-from llm_engines import ChatgptLLM
+from llm_engines import ChatgptLLM, LLMApi
 from dialogue_react_agent import load_base_prompt
 from nltk.util import ngrams
 import logging
@@ -82,9 +82,16 @@ def calc_llm_as_a_judge(chat_history:str|list[str], model:str="gpt-4o", n_consis
     if type(chat_history)==str:
         chat_history = [chat_history]
 
-    # set correct model
-    llm=ChatgptLLM()
-    llm.model=model        
+    if model=="prometheus-2.0":
+        # use the new model
+        model="prometheus-7b-v2.0.Q5_0.gguf"
+        llm=LLMApi()
+        llm.model=model
+    else:
+        # set correct model
+        llm=ChatgptLLM()
+        llm.model=model        
+        
     # the prompt is a jinja template
     prompt = absolute_eval_prompt
     
@@ -154,12 +161,16 @@ def calc_llm_as_a_judge_pairwise(chat_history_a:str|list[str], chat_history_b:st
         
     # check if the chat histories have the same length
     assert len(chat_history_a)==len(chat_history_b), "Chat histories must have the same length"
-
-    # set correct model
-    llm=ChatgptLLM()
-    llm.model=model        
-    # the prompt is a jinja template
-    prompt = pairwise_eval_prompt
+    
+    if model=="prometheus-2.0":
+        # use the new model
+        model="prometheus-7b-v2.0.Q5_0.gguf"
+        llm=LLMApi()
+        llm.model=model
+    else:
+        # set correct model
+        llm=ChatgptLLM()
+        llm.model=model        
         
     def extract_score(llm_answer:str):
         """ Extract the winner of the chat history from the LLM answer (A or B)
@@ -201,11 +212,15 @@ def calc_llm_as_a_judge_pairwise(chat_history_a:str|list[str], chat_history_b:st
             # shuffling to stop favoring one chat history
             if np.random.rand()>0.5:
                 chat_a, chat_b = chat_b, chat_a
+                switch=True
             prompt_rendered = prompt.render(chat_history_a=chat_a, chat_history_b=chat_b)
             winner_this_round = None
             while not winner_this_round:
                 try:
                     winner_this_round = extract_score(llm.generate_response(prompt_rendered))
+                    # fix the winner if the chat histories were switched
+                    if switch:
+                        winner_this_round = "A" if winner_this_round=="B" else "B"
                 except:
                     pass
             
@@ -235,7 +250,7 @@ if __name__ == "__main__":
         
     ]
     
-    judge_score = calc_llm_as_a_judge(chat_history, n_consistency=3)
+    judge_score = calc_llm_as_a_judge(chat_history, n_consistency=3, model="prometheus-2.0")
     print(f"LLM-As-A-JUDGE score: {judge_score}")
     
     # test pairwise
@@ -248,5 +263,5 @@ if __name__ == "__main__":
         "Alice: Hi,\nBob: Hello,\nAlice: The pen is on the table\nBob: Not bad",
     ]   
     
-    pairwise_matches=calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b, n_consistency=3)
+    pairwise_matches=calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b, n_consistency=3, model="prometheus-2.0")
     print(f"Pairwise winners: {pairwise_matches}")

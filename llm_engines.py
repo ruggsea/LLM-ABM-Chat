@@ -78,11 +78,11 @@ class LLM:
 # now a real llm model class that gives completions using openai-like api
 
 class LLMApi(LLM):
-    def __init__(self, history=[]):
+    def __init__(self, history=[], model="turboderp_Mixtral-8x7B-instruct-exl2_5.0bpw"):
         super().__init__(history)
         self.url = url
         self.headers = headers
-    
+        self.model = model
     def generate_response(self, user_prompt):
         
         assistant_message = ""
@@ -94,6 +94,7 @@ class LLMApi(LLM):
         data = {
         "mode":  "instruct",
         "messages": self.history,
+        "model": self.model,
         }
         response = requests.post(url, headers=headers, json=data, verify=False, )
         
