@@ -18,6 +18,10 @@ if os.path.exists(".env"):
     
 url= "http://127.0.0.1:1200/v1/chat/completions"
 
+model_info_url= "http://127.0.0.1:1200/v1/internal/model/info"
+
+load_model_url = "http://127.0.0.1:1200/v1/internal/model/load"
+
 headers = {
     "Content-Type": "application/json"
 }
@@ -83,10 +87,23 @@ class LLMApi(LLM):
         self.url = url
         self.headers = headers
         self.model = model
+    
+    def get_current_model(self):
+        # send a request to get the current model
+        response = requests.get(model_info_url, headers=self.headers, verify=False)
+        return response.json()["model_name"]
+    
+    
     def generate_response(self, user_prompt):
         
         assistant_message = ""
 
+        # make sure the model is loaded
+        if self.get_current_model() != self.model:
+            data = {
+                "model_name": self.model
+            }
+            response = requests.post(load_model_url, headers=self.headers, json=data, verify=False)
         
         # append user prompt to history
         self.history.append({"role":"user","content": user_prompt})
@@ -94,7 +111,6 @@ class LLMApi(LLM):
         data = {
         "mode":  "instruct",
         "messages": self.history,
-        "model": self.model,
         }
         response = requests.post(url, headers=headers, json=data, verify=False, )
         

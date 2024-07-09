@@ -47,9 +47,23 @@ reflection_template = load_base_prompt("prompts/reflection_generation.j2")
 dialogue_acts_list=read_dialogue_act_list("prompts/dialogue_acts.json")
 
 
-logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
+# Create a custom logger
+internal_agent_logger = logging.getLogger('agent_internal')
+internal_agent_logger.setLevel(logging.INFO)
 
+# Create handlers
+internal_agent_file_handler = logging.FileHandler('agent_internal.log', mode='w')
+internal_agent_file_handler.setLevel(logging.INFO)
 
+# Create formatters and add it to handlers
+formatter = logging.Formatter('%(asctime)-15s %(message)s')
+internal_agent_file_handler.setFormatter(formatter)
+
+# Add handlers to the internal_agent_logge
+internal_agent_logger.addHandler(internal_agent_file_handler)
+
+# prevent logging from propagating to the root logger
+internal_agent_logger.propagate = False
 
 
 class DialogueReactAgent(ReflectingAgent):
@@ -134,7 +148,7 @@ class DialogueReactAgent(ReflectingAgent):
         
         
         # log compiled memory prompt
-        logging.info(f"Memory prompt: {memory_prompt}")
+        internal_agent_logger.info(f"Memory prompt: {memory_prompt}")
         
         ## generate until you get the desired number of memories
         memories = []
@@ -202,7 +216,7 @@ class DialogueReactAgent(ReflectingAgent):
                                                        agent_list=agent_list)
         
         # log compiled reflection prompt
-        logging.info(f"Reflection prompt: {reflection_prompt}")
+        internal_agent_logger.info(f"Reflection prompt: {reflection_prompt}")
         
         ## generate until you get the desired number of reflections
         reflections = []
@@ -292,7 +306,7 @@ class DialogueReactAgent(ReflectingAgent):
             )
         
         # log rendered prompt
-        logging.info(f"Answer generation prompt: {prompt}")
+        internal_agent_logger.info(f"Answer generation prompt: {prompt}")
         
         # get the answer for the dialogue react method
         if self.ablation == None:
@@ -312,20 +326,24 @@ class DialogueReactAgent(ReflectingAgent):
                         ## check that thought is a dialogue act
                         observation = observation[0].strip()
                         thought = thought[0].strip()
+                        # remove everything after the first > in the thought
+                        thought = thought.split(">")[0]
+                        # readd the > at the end
+                        thought = thought + ">"     
                         action = action[0].strip()
                         if thought not in self.dialogue_acts:
-                            logging.info(f"Invalid dialogue act: {thought}.")
+                            internal_agent_logger.info(f"Invalid dialogue act: {thought}.")
                             continue
                         answer = action
                         #print(f"Valid answer: {answer_candidate}.")
-                        logging.info(f"Valid dialogue_act: {thought}.")
-                        logging.info(f"Valid answer: {answer}.")
+                        internal_agent_logger.info(f"Valid dialogue_act: {thought}.")
+                        internal_agent_logger.info(f"Valid answer: {answer}.")
                         break
                     else:
-                        logging.info(f"Invalid answer: {answer_candidate}.")
+                        internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
                 except Exception as e:
-                    logging.info(f"Error generating response: {e}.")
-                    logging.info(f"Invalid answer: {answer_candidate}.")
+                    internal_agent_logger.info(f"Error generating response: {e}.")
+                    internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
                     
             answer_with_dialogueAct = f"Following the observation: {observation}, I wanted to commit the following dialogue act: {thought}. Therefore, I wrote the message: {action}."                
             ## save the answer in memory
@@ -350,13 +368,13 @@ class DialogueReactAgent(ReflectingAgent):
                         thought = thought[0].strip()
                         action = action[0].strip()
                         answer = action
-                        logging.info(f"Valid answer: {answer}.")
+                        internal_agent_logger.info(f"Valid answer: {answer}.")
                         break
                     else:
-                        logging.info(f"Invalid answer: {answer_candidate}.")
+                        internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
                 except Exception as e:
-                    logging.info(f"Error generating response: {e}.")
-                    logging.info(f"Invalid answer: {answer_candidate}.")
+                    internal_agent_logger.info(f"Error generating response: {e}.")
+                    internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
         # generate answer for the ablation no_dialogue_no_react
         elif self.ablation == "no_dialogue_no_react":
             # in this case, the message is a string that ends with ##
@@ -367,13 +385,13 @@ class DialogueReactAgent(ReflectingAgent):
                         answer = answer_candidate
                         # remove the ##
                         answer = answer[:-2]
-                        logging.info(f"Valid answer: {answer}.")
+                        internal_agent_logger.info(f"Valid answer: {answer}.")
                         break
                     else:
-                        logging.info(f"Invalid answer: {answer_candidate}.")
+                        internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
                 except Exception as e:
-                    logging.info(f"Error generating response: {e}.")
-                    logging.info(f"Invalid answer: {answer_candidate}.")
+                    internal_agent_logger.info(f"Error generating response: {e}.")
+                    internal_agent_logger.info(f"Invalid answer: {answer_candidate}.")
             ## save the answer in memory
             self.memory.upsert([{"turn_count":turn_count, "text":answer}])
 

@@ -4,7 +4,7 @@ from dialogue_react_agent import load_base_prompt
 import random, logging, time,json, os, textwrap
 
 
-logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
+logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s", force=True)
 
 
 # few-shot examples for the PLACES paper are contained in a jsonl file at prompts/places_examples.jsonl, let's load them, eacj line is a few-shot example conversation
@@ -97,7 +97,33 @@ class NaiveConversationGeneration:
             os.makedirs("chat_logs")
         with open(f"chat_logs/{self.chat_id}.json", "w") as f:
             json.dump(chat_data, f)    
+    
+    def summarize_personas_into_oneliner(self):
+        """
+        Summarizes the personas of the agents into a one-liner.
+        """
+        # get the unique personas
+        personas=set([agent.persona for agent in self.agent_list])
         
+        # make it a string
+        personas_string = ". ".join(personas)
+        
+        examples="The following is a conversation between Alice and Bob about grocery shopping. Alice has a shopping list for Bob.\nThe following is a conversation between Alice and Bob about relationships. Bob recently got engaged.\nThe following is a conversation between Alice and Bob about their hobbies. Alice enjoys tennis and Bob likes playing soccer."
+        
+        prompt = f"Generate a sentence like the following one line summary of a convesation premise, but using the personas of the agents in the conversation. Remember to always use 'The following is a conversation between' and use the exact names from the personas. Include some details from topics the speakers are interested in based on their personas.\n Personas:\n\n{personas_string}\n\nFew-shot examples:\n{examples}. Answer (one line ending with ##):"
+        
+        answer = ""
+        
+        # keep asking until the answer is valid
+        while len(answer)<10 or len(answer)>100:
+            answer = self.neutral_llm.generate_response(prompt)
+            if "##" in answer and "The following is a conversation between" in answer and self.agent_list[0].name in answer and self.agent_list[1].name in answer:
+                answer=answer.split("##")[0]
+                answer=answer.strip()
+                return answer
+            else:
+                logging.info(f"Invalid answer: {answer}")
+                answer = ""
         
     def generate_conversation(self, min_turns :int=10, start_conversation:bool=True):
         """
@@ -124,20 +150,12 @@ class NaiveConversationGeneration:
             conversation_starter_string = f"{speaker.name}: {conversation_starter}"
         else:
             conversation_starter_string = ""
+            
+        
+        
         
 
         
-        
-        # fill out the prompt template
-        prompt = self.generation_template.render(
-            agent_names=[agent.name for agent in self.agent_list],
-            agent_personas=[agent.persona for agent in self.agent_list],
-            conversation_starter_string=conversation_starter_string,
-            first_speaker=speaker.name,
-            few_shot_examples=random.sample(self.few_shot_examples,3)
-        )
-        
-        logging.info(f"Naive generation prompt: {prompt}")
         
         # the answer should a list of strings, one message per line until the max_turns is reached
         
@@ -146,6 +164,16 @@ class NaiveConversationGeneration:
         # keep generating until you have a conversation of min max_turns length
         
         while self.turn < min_turns:
+            # fill out the prompt template
+            prompt = self.generation_template.render(
+                agent_names=[agent.name for agent in self.agent_list],
+                conversation_premise=self.summarize_personas_into_oneliner(),
+                conversation_starter_string=conversation_starter_string,
+                first_speaker=speaker.name,
+                few_shot_examples=random.sample(self.few_shot_examples,3)
+            )
+            logging.info(f"Naive generation prompt: {prompt}")
+            
             self.turn = 1 if start_conversation else 0
             
             # reset the chat history for each turn
@@ -153,7 +181,10 @@ class NaiveConversationGeneration:
             
             # generate the answer
             answer = self.neutral_llm.generate_response(prompt)
+            logging.info(f"Naive generation answer: {answer}")
             
+            # remove double newlines just in case
+            answer = answer.replace("\n\n", "\n")
             # split the answer into lines, each line should start with the agent name and a colon
             answer_lines = answer.split("\n")
             
@@ -161,6 +192,7 @@ class NaiveConversationGeneration:
             for line in answer_lines:
                 # split the line into agent name and message only at the first colon
                 try:
+                    line=line.strip()
                     agent_name, message = line.split(":", 1)
                     if agent_name in [agent.name for agent in self.agent_list]:
                         temp_chat_history.append((self.turn, agent_name, message))

@@ -4,9 +4,27 @@ from dialogue_react_agent import DialogueReactAgent, load_base_prompt
 
 eval_prompt=load_base_prompt("prompts/chat_evaluation.j2")
 
-logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s")
 
-class GroupchatThread:
+# Create a custom logger
+group_chat_logger = logging.getLogger('chat_thread')
+group_chat_logger.setLevel(logging.INFO)
+
+# Create handlers
+group_chat_file_handler = logging.FileHandler('chat.log', mode='w')
+group_chat_file_handler.setLevel(logging.INFO)
+
+# Create formatters and add it to handlers
+formatter = logging.Formatter('%(asctime)-15s %(message)s')
+group_chat_file_handler.setFormatter(formatter)
+
+# Add handlers to the logger
+group_chat_logger.addHandler(group_chat_file_handler)
+
+# prevent logging from propagating to the root logger
+group_chat_logger.propagate = False
+
+
+class GroupChatThread:
     """
     A group chat thread that simulates a conversation between multiple agents.    
     """
@@ -69,7 +87,7 @@ class GroupchatThread:
         assert self.turn == 0, "The conversation has already started."
         
         # log the start of the conversation and agent list
-        logging.info(f"Starting conversation {self.chat_id} with agents: {[agent.name for agent in self.agent_list]}")
+        group_chat_logger.info(f"Starting conversation {self.chat_id} with agents: {[agent.name for agent in self.agent_list]}")
         
         random_agent = self.pick_random_agent()
         first_message = (1, random_agent.name, random.choice(self.conversation_starters))
@@ -142,7 +160,7 @@ class GroupchatThread:
                 if eval_score >= 0 and eval_score <= 10:
                     eval_results.append(eval_score)
             except Exception as e:
-                logging.error(f"Error in evaluation response: {eval_result}")
+                group_chat_logger.error(f"Error in evaluation response: {eval_result}")
                 print(e)
         
         eval_score = sum(eval_results) / 3
@@ -221,7 +239,7 @@ class GroupchatThread:
                 raise ValueError("The selection method is not valid.")
         
         # log the end of the conversation
-        logging.info(f"Ending conversation {self.chat_id} after {self.turn} turns.")
+        group_chat_logger.info(f"Ending conversation {self.chat_id} after {self.turn} turns.")
         # at the end of the chat, evaluate the chat
         if self.n_eval != -1:
             self.evaluate_chat()

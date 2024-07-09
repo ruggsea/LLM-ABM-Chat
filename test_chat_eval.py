@@ -1,5 +1,5 @@
 import unittest
-from chat_eval import calc_distinct_n
+from chat_eval import calc_distinct_n, calc_llm_as_a_judge_pairwise
 
 class TestChatEval(unittest.TestCase):
     def test_calc_distinct_n_single_n1(self):
@@ -68,7 +68,55 @@ class TestChatEval(unittest.TestCase):
         expected_result = 5
         self.assertEqual(calc_distinct_n(chat_history, n=3), expected_result)
         
+
+    
+    def test_calc_llm_as_a_judge_pairwise(self):
+        chat_history_a = "Hello, how are you?"
+        chat_history_b = "I'm good, thanks!"
+        expected_result = ["A"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+        
+        chat_history_a = ["Hello, how are you?", "I'm good, thanks!"]
+        chat_history_b = ["Hi, how are you?", "I'm great, thanks!"]
+        expected_result = ["A", "B"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+        
+        chat_history_a = ["Hello, how are you?", "I'm good, thanks!"]
+        chat_history_b = ["Hello, how are you?", "I'm good, thanks!"]
+        expected_result = ["A", "A"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+
+    
+    def test_calc_llm_as_a_judge_pairwise_single_chat(self):
+        chat_history_a = "Hello, how are you?"
+        chat_history_b = "I'm good, thanks!"
+        expected_result = ["A"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+        
+    def test_calc_llm_as_a_judge_pairwise_multiple_chats(self):
+        chat_history_a = ["Hello, how are you?", "I'm good, thanks!"]
+        chat_history_b = ["Hi, how are you?", "I'm great, thanks!"]
+        expected_result = ["A", "B"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+        
+    def test_calc_llm_as_a_judge_pairwise_same_chats(self):
+        chat_history_a = ["Hello, how are you?", "I'm good, thanks!"]
+        chat_history_b = ["Hello, how are you?", "I'm good, thanks!"]
+        expected_result = ["A", "A"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b), expected_result)
+        
+    def test_calc_llm_as_a_judge_pairwise_different_model(self):
+        chat_history_a = "Hello, how are you?"
+        chat_history_b = "I'm good, thanks!"
+        expected_result = ["A"]
+        self.assertEqual(calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b, model="prometheus-2.0"), expected_result)
+        
+    def test_calc_llm_as_a_judge_pairwise_invalid_score(self):
+        chat_history_a = "Hello, how are you?"
+        chat_history_b = "I'm good, thanks!"
+        expected_result = ["A"]
+        with self.assertRaises(AssertionError):
+            calc_llm_as_a_judge_pairwise(chat_history_a, chat_history_b, model="invalid_model")
         
 if __name__ == '__main__':
     unittest.main()
-
