@@ -2,10 +2,32 @@ from llm_engines import LLMApi, ChatgptLLM, LLM
 from chat_llm import Agent
 from dialogue_react_agent import load_base_prompt
 import random, logging, time,json, os, textwrap
+import logging
+import sys
 
 
-logging.basicConfig(level=logging.INFO, filename="chat.log", filemode="w", format="%(asctime)-15s %(message)s", force=True)
+# Create a logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
+# Create a file handler
+file_handler = logging.FileHandler("chat.log")
+file_handler.setLevel(logging.INFO)
+
+# Create a stream handler
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setLevel(logging.INFO)
+
+# Create a formatter and add it to the handlers
+formatter = logging.Formatter("%(asctime)-15s %(message)s")
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
+
+# Add the handlers to the logger
+logger.addHandler(file_handler)
+
+# log something to the file
+logger.info("Logging started.")
 
 # few-shot examples for the PLACES paper are contained in a jsonl file at prompts/places_examples.jsonl, let's load them, eacj line is a few-shot example conversation
 def load_places_examples(file_path:str="prompts/places_examples.jsonl"):
@@ -122,7 +144,8 @@ class NaiveConversationGeneration:
                 answer=answer.strip()
                 return answer
             else:
-                logging.info(f"Invalid answer: {answer}")
+                # log 
+                logger.info(f"Invalid answer: {answer}")
                 answer = ""
         
     def generate_conversation(self, min_turns :int=10, start_conversation:bool=True):
@@ -172,7 +195,7 @@ class NaiveConversationGeneration:
                 first_speaker=speaker.name,
                 few_shot_examples=random.sample(self.few_shot_examples,3)
             )
-            logging.info(f"Naive generation prompt: {prompt}")
+            logger.info(f"Naive generation prompt: {prompt}")
             
             self.turn = 1 if start_conversation else 0
             
@@ -181,7 +204,7 @@ class NaiveConversationGeneration:
             
             # generate the answer
             answer = self.neutral_llm.generate_response(prompt)
-            logging.info(f"Naive generation answer: {answer}")
+            logger.info(f"Naive generation answer: {answer}")
             
             # remove double newlines just in case
             answer = answer.replace("\n\n", "\n")

@@ -1,0 +1,1 @@
+{"chat_id": "chat_1718853055", "chat_history": [[0, "Bob", "How is it going?"], [0, "Bob", "How is it going?"]], "agent_list": [{"name": "Alice", "persona": "Alice likes cars"}, {"name": "Bob", "persona": "Bob likes books"}], "neutral_llm": "ChatgptLLM", "topics_to_cover": []}

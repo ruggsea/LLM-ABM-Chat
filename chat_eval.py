@@ -13,6 +13,9 @@ from llm_engines import ChatgptLLM, LLMApi
 from dialogue_react_agent import load_base_prompt
 from nltk.util import ngrams
 import logging
+# load gpt2 tokenizer
+from transformers import GPT2Tokenizer
+from tqdm import tqdm
 
 
 
@@ -44,20 +47,23 @@ def load_chat_history(path:str):
 
 def calc_perplexity(chat_history:str|list[str]):
     ## use hf evaluate to calculate per chat history perplexity
+    ## returns a vector of perplexity scores (one per chat)
     # load the model
     
     if type(chat_history)==str:
         chat_history = [chat_history]
 
     perplexity=evaluate.load("perplexity", module_type="metric")
+    
     results = perplexity.compute(model_id='gpt2',
                              add_start_token=False,
-                             predictions=chat_history)
+                             predictions=chat_history, max_length=1024)
     
-    return results["mean_perplexity"]
+    return results["perplexities"]
 
 def calc_distinct_n(chat_history:str|list[str], n:int=1):
     # calculate different n-grams in the chat history
+    # return vector of n_distincts scores (one per chat)
     if type(chat_history)==str:
         chat_history = [chat_history]
     # for chat in chat_history, calculate the n-grams of size n
@@ -69,15 +75,17 @@ def calc_distinct_n(chat_history:str|list[str], n:int=1):
         # make everything lowercase
         chat = chat.lower()
         n_distinct = len(set(ngrams(chat.split(), n)))
+        # make the n_distinct proportional to the length of the chat
+        n_distinct = n_distinct/len(chat.split())
         n_distincts.append(n_distinct)
-    return np.mean(n_distincts)
+    return n_distincts
 
 
 # now we need to calculate the LLM-As-A-JUDGE
 
 def calc_llm_as_a_judge(chat_history:str|list[str], model:str="gpt-4o", n_consistency:int=1):
     # calculate the LLM-As-A-JUDGE metric
-    
+    # return vector of scores (one per chat)
     # format chat_history to a list of strings if it is a single string
     if type(chat_history)==str:
         chat_history = [chat_history]
@@ -123,7 +131,7 @@ def calc_llm_as_a_judge(chat_history:str|list[str], model:str="gpt-4o", n_consis
             print(llm_answer)
             assert False, f"Invalid answer: {llm_answer}"
     logging.info(f"Judging singularly {len(chat_history)} chat histories with model {llm.model}")
-    for chat in chat_history:
+    for chat in tqdm(chat_history, desc="Absolute evaluation"):
         single_chat_scores=[]
         prompt_rendered = prompt.render(chat_history=chat)
         logging.info(f"Prompt rendered: {prompt_rendered}")
@@ -144,15 +152,16 @@ def calc_llm_as_a_judge(chat_history:str|list[str], model:str="gpt-4o", n_consis
         logging.info(f"Mean score: {np.mean(scores)}")
     else:
         logging.info(f"Score: {scores[0]}")
-    return np.mean(scores)
+    return scores
 
 
 ## same function but pairwise, for each pair of chat histories, calculate the LLM-As-A-JUDGE score
 
 def calc_llm_as_a_judge_pairwise(chat_history_a:str|list[str], chat_history_b:str|list[str], model:str="gpt-4o", n_consistency:int=1):
     # calculate the LLM-As-A-JUDGE metric
+    # output the winner of each pair of chat histories as a list
     
-    
+    prompt=pairwise_eval_prompt
     # format chat_history to a list of strings if it is a single string
     if type(chat_history_a)==str:
         chat_history_a = [chat_history_a]
@@ -202,8 +211,8 @@ def calc_llm_as_a_judge_pairwise(chat_history_a:str|list[str], chat_history_b:st
             logging.info(f"Invalid answer: {llm_answer}")
             assert False, f"Invalid answer: {llm_answer}"
     logging.info(f"Judging pairwise {len(chat_history_a)} chat of group A with {len(chat_history_b)} of group b chat histories with model {llm.model}")
-    matchup_winnes=[]
-    for chat_a, chat_b in zip(chat_history_a, chat_history_b):
+    matchup_winners=[]
+    for chat_a, chat_b in tqdm(zip(chat_history_a, chat_history_b), total=len(chat_history_a), desc="Pairwise evaluation"):
         # shuffle the order of the chats
         single_comparison_winners=[]
         logging.info(f"Generating {n_consistency} winners for this pair of chat histories.")
@@ -231,14 +240,14 @@ def calc_llm_as_a_judge_pairwise(chat_history_a:str|list[str], chat_history_b:st
         logging.info(f"Consistency level wins for A: {single_comparison_winners.count('A')}")
         logging.info(f"Consistency level wins for B: {single_comparison_winners.count('B')}")
         logging.info(f"Overall winner for this pair of chat histories: {winner_this_matchup}")
-        matchup_winnes.append(winner_this_matchup)
+        matchup_winners.append(winner_this_matchup)
         
     # log the wins per groups of chat histories
-    logging.info(f"Matchup wins for A: {matchup_winnes.count('A')}")
-    logging.info(f"Matchup wins for B: {matchup_winnes.count('B')}")
+    logging.info(f"Matchup wins for A: {matchup_winners.count('A')}")
+    logging.info(f"Matchup wins for B: {matchup_winners.count('B')}")
     
     # return array of winners
-    return matchup_winnes
+    return matchup_winners
         
     
     
