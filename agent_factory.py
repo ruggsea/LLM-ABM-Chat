@@ -8,8 +8,8 @@ import itertools
 import logging
 
 # Create a custom logger
-angent_factory_logger = logging.getLogger('agent_factory')
-angent_factory_logger.setLevel(logging.INFO)
+agent_factory_logger = logging.getLogger('agent_factory')
+agent_factory_logger.setLevel(logging.INFO)
 
 # Create handlers
 agent_factory_file_handler = logging.FileHandler('agent_factory.log', mode='w')
@@ -20,7 +20,7 @@ formatter = logging.Formatter('%(asctime)-15s %(message)s')
 agent_factory_file_handler.setFormatter(formatter)
 
 # Add handlers to the logger
-angent_factory_logger.addHandler(agent_factory_file_handler)
+agent_factory_logger.addHandler(agent_factory_file_handler)
 
 def read_personas():
     list_personas=[]
