@@ -97,24 +97,28 @@ def main():
             # save the chat ids
             with open("thesis_generations/gen_chat_ids_list_no_dialogue_no_react_gemma2.json", "w") as f:
                 json.dump(chat_ids_no_dialogue_no_react, f)
-            
-    # ablation 4: no_dialogue
-    
-    chat_ids_no_dialogue=[]
-    
-    if not os.path.exists("thesis_generations/gen_chat_ids_list_no_dialogue_no_react_gemma2.json"):
-        chats=group_chats_from_chat_pairs(chat_pairs, llm=llm,memory_freq=10, reflections_freq=25, ablation="no_dialogue")
-        i=0
-        for chat in tqdm(chats, desc="Running chats (no dialogue)"):
-            ## add offset to chat id
-            i+=1
-            chat.chat_id+=str(i)
-            id=chat.chat_id           
-            chat.run_chat(max_turns=50)
-            chat_ids_no_dialogue.append(id)
-            # save the chat ids
-            with open("thesis_generations/gen_chat_ids_list_no_dialogue_no_react_gemma2.json", "w") as f:
-                json.dump(chat_ids_no_dialogue, f)
+    else:
+        with open("thesis_generations/gen_chat_ids_list_no_dialogue_no_react_gemma2.json") as f:
+            chat_ids_no_dialogue_no_react=json.load(f)
+        if len(chat_pairs)> len(chat_ids_no_dialogue_no_react):
+            starting_index=len(chat_ids_no_dialogue_no_react)
+            print("Resuming generation from last chat id")
+            print(f"Chat ids generated: {len(chat_ids_no_dialogue_no_react)}")
+            print(f"Chat pairs to generate: {len(chat_pairs)}")
+            print(f"Chat pairs left to generate: {len(chat_pairs[starting_index:])}")
+            chats=group_chats_from_chat_pairs(chat_pairs[starting_index:], llm=llm,memory_freq=10, reflections_freq=25, ablation="no_dialogue_no_react")
+            print(f"Generating {len(chats)} chats")
+            for chat in tqdm(chats, desc="Running chats (no dialogue, no react)"):
+                ## add offset to chat id
+                i+=1
+                chat.chat_id+=str(i)    
+                id=chat.chat_id           
+                chat.run_chat()
+                chat_ids_no_dialogue_no_react.append(id)
+                # save the chat ids
+                with open("thesis_generations/gen_chat_ids_list_no_dialogue_no_react_gemma2.json", "w") as f:
+                    json.dump(chat_ids_no_dialogue_no_react, f)
                 
+    
 if __name__=="__main__":
     main()

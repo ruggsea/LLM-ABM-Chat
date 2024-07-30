@@ -381,6 +381,7 @@ class DialogueReactAgent(ReflectingAgent):
             while True:
                 try:
                     answer_candidate = self.llm.generate_response(prompt)
+                    answer_candidate = answer_candidate.strip() 
                     if answer_candidate.endswith("##"):
                         answer = answer_candidate
                         # remove the ##

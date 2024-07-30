@@ -45,6 +45,7 @@ def load_chat_history(path:str):
         chat_str+=message[1].strip()+": "+message[2].strip()+"\n"
     return chat_str
 
+
 def calc_perplexity(chat_history:str|list[str]):
     ## use hf evaluate to calculate per chat history perplexity
     ## returns a vector of perplexity scores (one per chat)
@@ -52,14 +53,30 @@ def calc_perplexity(chat_history:str|list[str]):
     
     if type(chat_history)==str:
         chat_history = [chat_history]
-
-    perplexity=evaluate.load("perplexity", module_type="metric")
+    # make only the second graphics card available
     
-    results = perplexity.compute(model_id='gpt2',
-                             add_start_token=False,
-                             predictions=chat_history, max_length=1024)
+    # Split chat history into batches
+    batch_size = 8
+    chat_batches = [chat_history[i:i+batch_size] for i in range(0, len(chat_history), batch_size)]
     
-    return results["perplexities"]
+    perplexities = []
+    
+    # Process each batch
+    for batch in chat_batches:
+        perplexity=evaluate.load("perplexity", module_type="metric")
+        batch_results = perplexity.compute(model_id='gpt2',
+                                           add_start_token=False,
+                                           predictions=batch,
+                                           max_length=1024,
+                                           device="cuda")
+            # clean gpu memory
+        torch.cuda.empty_cache()
+        del perplexity
+        perplexities.extend(batch_results["perplexities"])
+    
+    
+    
+    return perplexities
 
 def calc_distinct_n(chat_history:str|list[str], n:int=1):
     # calculate different n-grams in the chat history
