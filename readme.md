@@ -253,10 +253,6 @@ The framework includes tests for:
 - Dialogue generation quality
 - React prompting effectiveness
 
-## Note
-
-This master thesis project introduces DialogueReact as a novel approach to generating more natural and meaningful conversations, with a focus on improving dialogue synthesis through react prompting and dialogue acts.
-
 ## Additional Features
 
 ### Conversation Stream Viewer
